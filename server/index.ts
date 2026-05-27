@@ -1,7 +1,12 @@
 import express from "express";
+import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
+import { createReadStream } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { applyImportArchive, writeExportArchive } from "./archive";
 import { getDetail, listInventory, toggleItem } from "./discovery";
+import { getUsageSummary } from "./usage";
 
 const app = express();
 const port = Number(process.env.PORT ?? process.env.SKILL_TOGGLE_API_PORT ?? 4127);
@@ -13,6 +18,15 @@ app.use(express.json({ limit: "1mb" }));
 app.get("/api/inventory", async (_req, res, next) => {
   try {
     res.json({ items: await listInventory() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/usage", async (_req, res, next) => {
+  try {
+    const items = await listInventory();
+    res.json(await getUsageSummary(items));
   } catch (error) {
     next(error);
   }
@@ -37,6 +51,49 @@ app.post("/api/items/:id/toggle", async (req, res, next) => {
     res.json({ item });
   } catch (error) {
     next(error);
+  }
+});
+
+app.get("/api/export", async (_req, res, next) => {
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const filename = `skill-toggle-export-${stamp}.tar.gz`;
+  const tmpPath = path.join(os.tmpdir(), filename);
+  try {
+    const summary = await writeExportArchive(tmpPath);
+    res.setHeader("Content-Type", "application/gzip");
+    res.setHeader("Content-Length", String(summary.bytes));
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("X-Skill-Toggle-Sources", summary.sources.join(","));
+    const stream = createReadStream(tmpPath);
+    stream.on("close", () => {
+      void fs.rm(tmpPath, { force: true });
+    });
+    stream.on("error", (err) => {
+      void fs.rm(tmpPath, { force: true });
+      next(err);
+    });
+    stream.pipe(res);
+  } catch (error) {
+    await fs.rm(tmpPath, { force: true }).catch(() => undefined);
+    next(error);
+  }
+});
+
+app.post("/api/import", express.raw({ type: ["application/gzip", "application/x-gzip", "application/octet-stream"], limit: "5gb" }), async (req, res, next) => {
+  const body = req.body as Buffer | undefined;
+  if (!body || body.length === 0) {
+    res.status(400).json({ error: "Empty upload — send the tar.gz as the raw request body" });
+    return;
+  }
+  const tmpPath = path.join(os.tmpdir(), `skill-toggle-import-${Date.now()}.tar.gz`);
+  try {
+    await fs.writeFile(tmpPath, body);
+    const summary = await applyImportArchive(tmpPath);
+    res.json(summary);
+  } catch (error) {
+    next(error);
+  } finally {
+    await fs.rm(tmpPath, { force: true }).catch(() => undefined);
   }
 });
 
