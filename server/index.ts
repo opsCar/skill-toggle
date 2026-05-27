@@ -6,7 +6,7 @@ import { createReadStream } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { appendImportArchive, applyImportArchive, inspectImportArchive, writeExportArchive } from "./archive";
 import { getDetail, listInventory, toggleItem } from "./discovery";
-import { getUsageSummary } from "./usage";
+import { getContextProbe, getStartupProbe, getUsageSummary } from "./usage";
 
 const app = express();
 const port = Number(process.env.PORT ?? process.env.SKILL_TOGGLE_API_PORT ?? 4127);
@@ -28,6 +28,24 @@ app.get("/api/usage", async (_req, res, next) => {
   try {
     const items = await listInventory();
     res.json(await getUsageSummary(items));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/context-probe", async (req, res, next) => {
+  try {
+    const prompt = typeof req.query.prompt === "string" ? req.query.prompt : "hello";
+    const items = await listInventory();
+    res.json(getContextProbe(items, prompt));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/startup-probe", async (_req, res, next) => {
+  try {
+    res.json(await getStartupProbe());
   } catch (error) {
     next(error);
   }
