@@ -1,3 +1,0 @@
-npm test: pass
-npm run build: pass
-runtime smoke /api/inventory: pass, returned 598 categorized items on this machine
