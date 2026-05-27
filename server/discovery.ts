@@ -155,7 +155,9 @@ const pathSources: Record<ToolName, Record<Category, string[]>> = {
       path.join(projectRoot, "CLAUDE.md"),
       path.join(projectRoot, ".claude", "CLAUDE.md"),
       path.join(projectRoot, ".claude", "rules")
-    ]
+    ],
+    agents: [path.join(home, ".claude", "agents"), path.join(projectRoot, ".claude", "agents")],
+    plugins: [path.join(home, ".claude", "plugins"), path.join(projectRoot, ".claude", "plugins")]
   },
   codex: {
     skills: [path.join(home, ".codex", "skills"), path.join(home, ".agents", "skills"), path.join(projectRoot, ".codex", "skills")],
@@ -167,7 +169,9 @@ const pathSources: Record<ToolName, Record<Category, string[]>> = {
       path.join(projectRoot, "AGENTS.md"),
       path.join(projectRoot, ".codex", "AGENTS.md"),
       path.join(projectRoot, ".codex", "rules")
-    ]
+    ],
+    agents: [path.join(home, ".codex", "agents"), path.join(home, ".agents"), path.join(projectRoot, ".codex", "agents")],
+    plugins: [path.join(home, ".codex", "plugins"), path.join(projectRoot, ".codex", "plugins")]
   }
 };
 
@@ -291,7 +295,7 @@ async function collectConfigItems() {
 
 export async function listInventory() {
   const activePathItems = await Promise.all(
-    (["claude", "codex"] as const).flatMap((tool) => (["skills", "mcp", "hooks", "rules"] as const).map((category) => collectPathItems(tool, category)))
+    (["claude", "codex"] as const).flatMap((tool) => (["skills", "mcp", "hooks", "rules", "agents", "plugins"] as const).map((category) => collectPathItems(tool, category)))
   );
   const disabledPathItems = await Promise.all((["claude", "codex"] as const).map(collectDisabledPathItems));
   const configItems = await collectConfigItems();

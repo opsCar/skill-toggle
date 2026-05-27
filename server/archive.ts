@@ -368,11 +368,16 @@ async function collectArchivePathItems(root: string, items: ArchiveImportItem[])
     { tool: "claude", category: "hooks", rel: ".claude/.cursor/hooks" },
     { tool: "claude", category: "rules", rel: ".claude/rules" },
     { tool: "claude", category: "rules", rel: ".claude/CLAUDE.md", single: true },
+    { tool: "claude", category: "agents", rel: ".claude/agents" },
+    { tool: "claude", category: "plugins", rel: ".claude/plugins" },
     { tool: "codex", category: "skills", rel: ".codex/skills" },
+    { tool: "codex", category: "agents", rel: ".codex/agents" },
+    { tool: "codex", category: "agents", rel: ".agents" },
     { tool: "codex", category: "mcp", rel: ".codex/mcp" },
     { tool: "codex", category: "hooks", rel: ".codex/hooks" },
     { tool: "codex", category: "rules", rel: ".codex/rules" },
-    { tool: "codex", category: "rules", rel: ".codex/AGENTS.md", single: true }
+    { tool: "codex", category: "rules", rel: ".codex/AGENTS.md", single: true },
+    { tool: "codex", category: "plugins", rel: ".codex/plugins" }
   ];
 
   for (const source of sourceDefs) {

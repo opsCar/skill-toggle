@@ -1,13 +1,13 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BarChart3, BookOpen, Boxes, Check, ChevronDown, ChevronRight, Code2, Download, FileJson, FolderCog, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Upload, X } from "lucide-react";
+import { BarChart3, BookOpen, Boxes, Check, ChevronDown, ChevronRight, Code2, Download, FileJson, FolderCog, Plug, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Upload, UsersRound, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import "./index.css";
 
 type ToolName = "claude" | "codex";
-type Category = "skills" | "mcp" | "hooks" | "rules";
+type Category = "skills" | "mcp" | "hooks" | "rules" | "agents" | "plugins";
 
 interface InventoryItem {
   id: string;
@@ -52,6 +52,8 @@ interface UsageStats {
   hook: number;
   tool: number;
   rule: number;
+  agent: number;
+  plugin: number;
   lastUsed?: string;
   evidence: string[];
 }
@@ -70,7 +72,9 @@ const categories: Array<{ key: Category | "all"; label: string; icon: React.Elem
   { key: "skills", label: "Skills", icon: BookOpen },
   { key: "mcp", label: "MCP", icon: FileJson },
   { key: "hooks", label: "Hooks", icon: Code2 },
-  { key: "rules", label: "Rules", icon: ShieldCheck }
+  { key: "rules", label: "Rules", icon: ShieldCheck },
+  { key: "agents", label: "Agents", icon: UsersRound },
+  { key: "plugins", label: "Plugins", icon: Plug }
 ];
 
 function App() {
@@ -86,6 +90,7 @@ function App() {
   const [usageById, setUsageById] = React.useState<Record<string, UsageStats>>({});
   const [usageLoading, setUsageLoading] = React.useState(false);
   const [exportOpen, setExportOpen] = React.useState(false);
+  const [exportProgress, setExportProgress] = React.useState<number | null>(null);
   const [importFile, setImportFile] = React.useState<File | null>(null);
   const [importInspection, setImportInspection] = React.useState<ImportInspection | null>(null);
   const importInputRef = React.useRef<HTMLInputElement>(null);
@@ -152,6 +157,7 @@ function App() {
   async function runExport(options: { filename: string; itemIds: string[]; saveHandle?: FileSystemFileHandle | null }) {
     setExportOpen(false);
     setBusy(true);
+    setExportProgress(-1);
     setError("");
     setStatus("Building archive — this can take a minute on a large env.");
     try {
@@ -164,7 +170,26 @@ function App() {
         const data = await response.json().catch(() => ({ error: "Export failed" }));
         throw new Error(data.error ?? "Export failed");
       }
-      const blob = await response.blob();
+      const totalHeader = response.headers.get("Content-Length");
+      const total = totalHeader ? Number(totalHeader) : 0;
+      let blob: Blob;
+      if (response.body && total > 0) {
+        setExportProgress(0);
+        const reader = response.body.getReader();
+        const chunks: BlobPart[] = [];
+        let received = 0;
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          chunks.push(value);
+          received += value.length;
+          setExportProgress(Math.min(1, received / total));
+        }
+        blob = new Blob(chunks, { type: response.headers.get("Content-Type") ?? "application/gzip" });
+      } else {
+        blob = await response.blob();
+      }
+      setExportProgress(1);
       const headerFilename = response.headers.get("X-Skill-Toggle-Filename");
       const disposition = response.headers.get("Content-Disposition") ?? "";
       const match = disposition.match(/filename="?([^";]+)"?/);
@@ -192,6 +217,7 @@ function App() {
       setStatus("");
     } finally {
       setBusy(false);
+      setExportProgress(null);
     }
   }
 
@@ -313,9 +339,23 @@ function App() {
           </div>
           <div className="flex items-center gap-2">
             <input ref={importInputRef} type="file" accept=".tar.gz,.tgz,application/gzip,application/x-gzip" className="hidden" onChange={onImportPicked} />
-            <Button variant="outline" onClick={() => setExportOpen(true)} disabled={busy || loading || items.length === 0}>
-              <Download className="h-4 w-4" />
-              Export
+            <Button
+              variant="outline"
+              onClick={() => setExportOpen(true)}
+              disabled={busy || loading || items.length === 0}
+              className={`relative gap-2 overflow-hidden ${exportProgress != null ? "disabled:opacity-100" : ""}`}
+            >
+              {exportProgress != null ? (
+                <span
+                  aria-hidden
+                  className={`pointer-events-none absolute inset-y-0 left-0 bg-blue-500/30 transition-[width] duration-150 ease-out ${
+                    exportProgress < 0 ? "w-full animate-pulse" : ""
+                  }`}
+                  style={exportProgress >= 0 ? { width: `${Math.round(exportProgress * 100)}%` } : undefined}
+                />
+              ) : null}
+              <Download className="relative h-4 w-4" />
+              <span className="relative">Export</span>
             </Button>
             <Button variant="outline" onClick={() => importInputRef.current?.click()} disabled={busy || loading}>
               <Upload className="h-4 w-4" />
@@ -530,10 +570,12 @@ const CATEGORY_LABELS: Record<Category, string> = {
   skills: "Skills",
   mcp: "MCP",
   hooks: "Hooks",
-  rules: "Rules"
+  rules: "Rules",
+  agents: "Agents",
+  plugins: "Plugins"
 };
 
-const CATEGORY_ORDER: Category[] = ["skills", "mcp", "hooks", "rules"];
+const CATEGORY_ORDER: Category[] = ["skills", "agents", "plugins", "mcp", "hooks", "rules"];
 
 interface ExportSelection {
   filename: string;
@@ -865,7 +907,7 @@ function ImportDialog({
           >
             <div className="text-sm font-medium">Append selected</div>
             <div className="mt-1 text-xs text-muted-foreground">
-              Scan the archive and add only selected skills, MCP entries, hooks, or rules to the current env.
+              Scan the archive and add only selected skills, agents, plugins, MCP entries, hooks, or rules to the current env.
             </div>
           </button>
         </div>
@@ -1067,7 +1109,9 @@ function usageSignal(usage?: UsageStats): string {
     ["mcp", usage.mcp],
     ["hook", usage.hook],
     ["tool", usage.tool],
-    ["rule", usage.rule]
+    ["rule", usage.rule],
+    ["agent", usage.agent],
+    ["plugin", usage.plugin]
   ];
   return rows.sort((a, b) => b[1] - a[1])[0][0];
 }

@@ -12,11 +12,13 @@ export interface UsageStats {
   hook: number;
   tool: number;
   rule: number;
+  agent: number;
+  plugin: number;
   lastUsed?: string;
   evidence: string[];
 }
 
-type UsageKind = "skill" | "mcp" | "hook" | "tool" | "rule";
+type UsageKind = "skill" | "mcp" | "hook" | "tool" | "rule" | "agent" | "plugin";
 type UsageSource = "claude" | "codex";
 
 interface UsageEvent {
@@ -37,6 +39,8 @@ const emptyStats = (): UsageStats => ({
   hook: 0,
   tool: 0,
   rule: 0,
+  agent: 0,
+  plugin: 0,
   evidence: []
 });
 
@@ -171,6 +175,12 @@ function textEvents(text: string, source: UsageSource, timestamp: string | undef
     const kind: UsageKind = match[1].includes("mcp") ? "mcp" : match[1].includes("hook") ? "hook" : "rule";
     events.push({ source, kind, name: match[1], timestamp, evidence });
   }
+  for (const match of text.matchAll(/\b(agent|subagent|agents)[/: ]+([A-Za-z0-9_.:-]{2,})/gi)) {
+    events.push({ source, kind: "agent", name: match[2], timestamp, evidence });
+  }
+  for (const match of text.matchAll(/\b(plugin|plugins)[/: ]+([A-Za-z0-9_.:-]{2,})/gi)) {
+    events.push({ source, kind: "plugin", name: match[2], timestamp, evidence });
+  }
   return events;
 }
 
@@ -209,7 +219,9 @@ function itemMatchers(item: InventoryItem): Array<(event: UsageEvent) => boolean
     (event) => event.kind === categoryKind && normalize(event.name) === base,
     (event) => item.category === "mcp" && event.kind === "mcp" && normalize(event.name).includes(name),
     (event) => item.category === "rules" && event.kind === "rule" && pathText.includes(normalize(event.name)),
-    (event) => item.category === "hooks" && event.kind === "hook" && pathText.includes(normalize(event.name))
+    (event) => item.category === "hooks" && event.kind === "hook" && pathText.includes(normalize(event.name)),
+    (event) => item.category === "agents" && event.kind === "agent" && pathText.includes(normalize(event.name)),
+    (event) => item.category === "plugins" && event.kind === "plugin" && pathText.includes(normalize(event.name))
   ];
 }
 
@@ -218,6 +230,8 @@ function kindForCategory(category: Category): UsageKind {
   if (category === "mcp") return "mcp";
   if (category === "hooks") return "hook";
   if (category === "rules") return "rule";
+  if (category === "agents") return "agent";
+  if (category === "plugins") return "plugin";
   return "tool";
 }
 

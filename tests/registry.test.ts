@@ -21,7 +21,7 @@ afterEach(async () => {
 });
 
 describe("registry", () => {
-  it("lists skills, MCP entries, hooks, and rules from Claude and Codex roots", async () => {
+  it("lists skills, agents, plugins, MCP entries, hooks, and rules from Claude and Codex roots", async () => {
     const roots = await makeRoots();
     await fs.mkdir(path.join(roots.projectRoot, ".codex", "skills", "demo"), { recursive: true });
     await fs.writeFile(
@@ -35,10 +35,16 @@ describe("registry", () => {
     );
     await fs.mkdir(path.join(roots.homeDir, ".codex"), { recursive: true });
     await fs.writeFile(path.join(roots.homeDir, ".codex", "AGENTS.md"), "# Rules\nUse local project instructions.");
+    await fs.mkdir(path.join(roots.projectRoot, ".codex", "agents", "reviewer"), { recursive: true });
+    await fs.writeFile(path.join(roots.projectRoot, ".codex", "agents", "reviewer", "README.md"), "# Reviewer\n");
+    await fs.mkdir(path.join(roots.homeDir, ".codex", "plugins", "browser"), { recursive: true });
+    await fs.writeFile(path.join(roots.homeDir, ".codex", "plugins", "browser", "README.md"), "# Browser\n");
 
     const items = await listItems(roots);
 
     expect(items.some((item) => item.category === "skill" && item.name === "demo" && item.description === "Demo skill description")).toBe(true);
+    expect(items.some((item) => item.category === "agent" && item.name === "reviewer")).toBe(true);
+    expect(items.some((item) => item.category === "plugin" && item.name === "browser")).toBe(true);
     expect(items.some((item) => item.category === "mcp" && item.name === "jira")).toBe(true);
     expect(items.some((item) => item.category === "hook" && item.name === "Stop")).toBe(true);
     expect(items.some((item) => item.category === "rule" && item.name === "AGENTS.md")).toBe(true);
