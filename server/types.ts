@@ -16,11 +16,21 @@ export interface InventoryItem {
   detailAvailable: boolean;
   valid: boolean;
   invalidReason?: string;
+  context: ContextStats;
 }
 
 export interface ItemDetail extends InventoryItem {
   detail: string;
   detailType: "markdown" | "json" | "text" | "none";
+}
+
+export interface ContextStats {
+  estimatedTokens: number;
+  characters: number;
+  bytes: number;
+  lines: number;
+  metric: "approx_chars_per_token";
+  charsPerToken: number;
 }
 
 export interface PathItemMeta {

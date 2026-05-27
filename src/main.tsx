@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BarChart3, BookOpen, Boxes, Check, Code2, Download, FileJson, FolderCog, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Upload } from "lucide-react";
+import { BarChart3, BookOpen, Boxes, Check, ChevronDown, ChevronRight, Code2, Download, FileJson, FolderCog, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
@@ -23,6 +23,7 @@ interface InventoryItem {
   detailAvailable: boolean;
   valid: boolean;
   invalidReason?: string;
+  context: ContextStats;
 }
 
 interface ItemDetail extends InventoryItem {
@@ -41,6 +42,15 @@ interface UsageStats {
   rule: number;
   lastUsed?: string;
   evidence: string[];
+}
+
+interface ContextStats {
+  estimatedTokens: number;
+  characters: number;
+  bytes: number;
+  lines: number;
+  metric: "approx_chars_per_token";
+  charsPerToken: number;
 }
 
 const categories: Array<{ key: Category | "all"; label: string; icon: React.ElementType }> = [
@@ -63,6 +73,7 @@ function App() {
   const [busy, setBusy] = React.useState(false);
   const [usageById, setUsageById] = React.useState<Record<string, UsageStats>>({});
   const [usageLoading, setUsageLoading] = React.useState(false);
+  const [exportOpen, setExportOpen] = React.useState(false);
   const importInputRef = React.useRef<HTMLInputElement>(null);
 
   const loadItems = React.useCallback(async () => {
@@ -124,30 +135,44 @@ function App() {
     void loadItems();
   }, []);
 
-  async function exportArchive() {
+  async function runExport(options: { filename: string; itemIds: string[]; saveHandle?: FileSystemFileHandle | null }) {
+    setExportOpen(false);
     setBusy(true);
     setError("");
     setStatus("Building archive — this can take a minute on a large env.");
     try {
-      const response = await fetch("/api/export");
+      const response = await fetch("/api/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: options.filename, itemIds: options.itemIds })
+      });
       if (!response.ok) {
         const data = await response.json().catch(() => ({ error: "Export failed" }));
         throw new Error(data.error ?? "Export failed");
       }
       const blob = await response.blob();
+      const headerFilename = response.headers.get("X-Skill-Toggle-Filename");
       const disposition = response.headers.get("Content-Disposition") ?? "";
       const match = disposition.match(/filename="?([^";]+)"?/);
-      const filename = match?.[1] ?? "skill-toggle-export.tar.gz";
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      const filename = headerFilename ?? match?.[1] ?? options.filename;
+      let destinationLabel = "Downloads folder";
+      if (options.saveHandle) {
+        const writable = await options.saveHandle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        destinationLabel = options.saveHandle.name;
+      } else {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+      }
       const sources = response.headers.get("X-Skill-Toggle-Sources") ?? "";
-      setStatus(`Exported ${filename} (${formatBytes(blob.size)})${sources ? ` · sources: ${sources}` : ""}.`);
+      setStatus(`Exported ${filename} (${formatBytes(blob.size)}) → ${destinationLabel}${sources ? ` · sources: ${sources}` : ""}.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Export failed");
       setStatus("");
@@ -211,6 +236,7 @@ function App() {
   const enabledCount = items.reduce((acc, item) => acc + Number(item.enabled), 0);
   const invalidSkillCount = itemsForTool.filter((item) => item.category === "skills" && !item.valid).length;
   const usageTotal = Object.values(usageById).reduce((acc, usage) => acc + usage.total, 0);
+  const contextTotal = itemsForTool.reduce((acc, item) => acc + item.context.estimatedTokens, 0);
   const selectedUsage = selected ? usageById[selected.id] : undefined;
 
   return (
@@ -221,11 +247,12 @@ function App() {
             <h1 className="text-2xl font-semibold tracking-normal">Skill Toggle</h1>
             <p className="mt-1 text-sm text-muted-foreground">
               {items.length} items · {enabledCount} enabled · {toolTotals.claude ?? 0} Claude Code · {toolTotals.codex ?? 0} Codex · {usageTotal} observed uses
+              · {formatNumber(contextTotal)} est. context tokens
             </p>
           </div>
           <div className="flex items-center gap-2">
             <input ref={importInputRef} type="file" accept=".tar.gz,.tgz,application/gzip,application/x-gzip" className="hidden" onChange={onImportPicked} />
-            <Button variant="outline" onClick={() => void exportArchive()} disabled={busy || loading}>
+            <Button variant="outline" onClick={() => setExportOpen(true)} disabled={busy || loading || items.length === 0}>
               <Download className="h-4 w-4" />
               Export
             </Button>
@@ -328,6 +355,7 @@ function App() {
                       <BarChart3 className="h-3.5 w-3.5" />
                       <span>{usageById[item.id]?.total ?? 0} uses</span>
                       {usageById[item.id]?.lastUsed ? <span>· last {formatDate(usageById[item.id]?.lastUsed ?? "")}</span> : null}
+                      <span>· {formatNumber(item.context.estimatedTokens)} est. tokens</span>
                     </div>
                   </button>
                 ))
@@ -375,6 +403,15 @@ function App() {
                 <Info label="Signal" value={usageSignal(selectedUsage)} />
                 <Info label="Last used" value={selectedUsage?.lastUsed ? formatDate(selectedUsage.lastUsed) : "none"} />
               </div>
+              <div className="mb-3 grid grid-cols-4 gap-2 text-xs">
+                <Info label="Est. tokens" value={formatNumber(selected.context.estimatedTokens)} />
+                <Info label="Characters" value={formatNumber(selected.context.characters)} />
+                <Info label="Bytes" value={formatBytes(selected.context.bytes)} />
+                <Info label="Lines" value={formatNumber(selected.context.lines)} />
+              </div>
+              <div className="mb-3 rounded-md border bg-card px-3 py-2 text-xs text-muted-foreground">
+                Context estimate uses {selected.context.charsPerToken} characters per token against the readable detail/config payload for this item.
+              </div>
               {selectedUsage?.evidence?.length ? (
                 <div className="mb-3 rounded-md border bg-card px-3 py-2 text-xs text-muted-foreground">
                   <div className="mb-1 font-medium text-foreground">Usage evidence</div>
@@ -396,7 +433,296 @@ function App() {
           )}
         </section>
       </div>
+      {exportOpen ? (
+        <ExportDialog
+          items={items}
+          onCancel={() => setExportOpen(false)}
+          onExport={(selection) => void runExport(selection)}
+        />
+      ) : null}
     </main>
+  );
+}
+
+const TOOL_LABELS: Record<ToolName, string> = {
+  claude: "Claude Code",
+  codex: "Codex"
+};
+
+const CATEGORY_LABELS: Record<Category, string> = {
+  skills: "Skills",
+  mcp: "MCP",
+  hooks: "Hooks",
+  rules: "Rules"
+};
+
+const CATEGORY_ORDER: Category[] = ["skills", "mcp", "hooks", "rules"];
+
+interface ExportSelection {
+  filename: string;
+  itemIds: string[];
+  saveHandle?: FileSystemFileHandle | null;
+}
+
+function ExportDialog({
+  items,
+  onCancel,
+  onExport
+}: {
+  items: InventoryItem[];
+  onCancel: () => void;
+  onExport: (selection: ExportSelection) => void;
+}) {
+  const defaultFilename = React.useMemo(() => {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+    return `skill-toggle-export-${stamp}.tar.gz`;
+  }, []);
+  const [filename, setFilename] = React.useState(defaultFilename);
+  const [saveHandle, setSaveHandle] = React.useState<FileSystemFileHandle | null>(null);
+  const [selected, setSelected] = React.useState<Set<string>>(() => new Set(items.map((item) => item.id)));
+  const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set(["tool:claude", "tool:codex"]));
+
+  const supportsFilePicker = typeof window !== "undefined" && typeof (window as any).showSaveFilePicker === "function";
+
+  const groups = React.useMemo(() => {
+    const map = new Map<ToolName, Map<Category, InventoryItem[]>>();
+    for (const item of items) {
+      let toolMap = map.get(item.tool);
+      if (!toolMap) {
+        toolMap = new Map();
+        map.set(item.tool, toolMap);
+      }
+      const list = toolMap.get(item.category) ?? [];
+      list.push(item);
+      toolMap.set(item.category, list);
+    }
+    const tools = Array.from(map.keys()).sort();
+    return tools.map((tool) => {
+      const toolMap = map.get(tool)!;
+      const cats = CATEGORY_ORDER.filter((cat) => toolMap.has(cat)).map((cat) => ({
+        category: cat,
+        items: (toolMap.get(cat) ?? []).slice().sort((a, b) => a.name.localeCompare(b.name))
+      }));
+      return { tool, categories: cats };
+    });
+  }, [items]);
+
+  function setMany(ids: string[], wanted: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (wanted) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }
+
+  function toolState(toolItems: InventoryItem[]): "all" | "some" | "none" {
+    let on = 0;
+    for (const item of toolItems) if (selected.has(item.id)) on += 1;
+    if (on === 0) return "none";
+    if (on === toolItems.length) return "all";
+    return "some";
+  }
+
+  function toggleExpanded(key: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  async function chooseLocation() {
+    if (!supportsFilePicker) return;
+    try {
+      const handle: FileSystemFileHandle = await (window as any).showSaveFilePicker({
+        suggestedName: filename,
+        types: [
+          {
+            description: "Gzipped tar archive",
+            accept: { "application/gzip": [".tar.gz", ".tgz"] }
+          }
+        ]
+      });
+      setSaveHandle(handle);
+      if (handle.name) setFilename(handle.name);
+    } catch (err) {
+      if ((err as DOMException)?.name === "AbortError") return;
+      // ignore other picker errors; user can still use browser download
+    }
+  }
+
+  function handleExport() {
+    onExport({ filename: filename.trim() || defaultFilename, itemIds: Array.from(selected), saveHandle });
+  }
+
+  const totalSelected = selected.size;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+      <div className="flex w-full max-w-3xl flex-col overflow-hidden rounded-lg border bg-card shadow-xl">
+        <div className="flex items-start justify-between gap-4 border-b px-5 py-4">
+          <div>
+            <h2 className="text-lg font-semibold">Export setup</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Pick a filename, optional save location, and the scope to include. {totalSelected} of {items.length} items selected.
+            </p>
+          </div>
+          <button onClick={onCancel} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Close">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="grid gap-3 border-b px-5 py-4 sm:grid-cols-[1fr_auto]">
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="text-muted-foreground">Filename</span>
+            <input
+              className="h-9 rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
+              value={filename}
+              onChange={(event) => {
+                setFilename(event.target.value);
+                if (saveHandle) setSaveHandle(null);
+              }}
+            />
+          </label>
+          <div className="flex flex-col gap-1 text-xs">
+            <span className="text-muted-foreground">Save location</span>
+            {supportsFilePicker ? (
+              <Button type="button" variant="outline" onClick={() => void chooseLocation()}>
+                <FolderCog className="h-4 w-4" />
+                {saveHandle ? "Change…" : "Choose…"}
+              </Button>
+            ) : (
+              <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-xs text-muted-foreground">
+                Browser Downloads folder
+              </div>
+            )}
+            {saveHandle ? <span className="truncate text-[11px] text-muted-foreground">→ {saveHandle.name}</span> : null}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between border-b px-5 py-2 text-xs">
+          <span className="text-muted-foreground">Scope (everything pre-selected by default)</span>
+          <div className="flex items-center gap-2">
+            <button
+              className="rounded-md border px-2 py-1 hover:bg-muted"
+              onClick={() => setSelected(new Set(items.map((item) => item.id)))}
+            >
+              Select all
+            </button>
+            <button className="rounded-md border px-2 py-1 hover:bg-muted" onClick={() => setSelected(new Set())}>
+              Clear
+            </button>
+          </div>
+        </div>
+
+        <ScrollArea className="h-[420px]">
+          <div className="px-5 py-3">
+            {groups.map(({ tool, categories: catGroups }) => {
+              const toolItems = catGroups.flatMap((group) => group.items);
+              const toolKey = `tool:${tool}`;
+              const toolStatus = toolState(toolItems);
+              const isExpanded = expanded.has(toolKey);
+              return (
+                <div key={tool} className="mb-3 rounded-md border">
+                  <div className="flex items-center gap-2 border-b px-3 py-2">
+                    <button
+                      onClick={() => toggleExpanded(toolKey)}
+                      className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted"
+                      aria-label={isExpanded ? "Collapse" : "Expand"}
+                    >
+                      {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    </button>
+                    <TriCheckbox
+                      state={toolStatus}
+                      onChange={(checked) => setMany(toolItems.map((item) => item.id), checked)}
+                    />
+                    <div className="flex-1 text-sm font-medium">{TOOL_LABELS[tool]}</div>
+                    <span className="text-xs text-muted-foreground">{toolItems.filter((item) => selected.has(item.id)).length}/{toolItems.length}</span>
+                  </div>
+                  {isExpanded ? (
+                    <div className="space-y-1 px-3 py-2">
+                      {catGroups.map(({ category, items: catItems }) => {
+                        const catKey = `cat:${tool}:${category}`;
+                        const catExpanded = expanded.has(catKey);
+                        let onCount = 0;
+                        for (const item of catItems) if (selected.has(item.id)) onCount += 1;
+                        const catStatus: "all" | "some" | "none" = onCount === 0 ? "none" : onCount === catItems.length ? "all" : "some";
+                        return (
+                          <div key={category} className="rounded-md border bg-muted/20">
+                            <div className="flex items-center gap-2 px-3 py-1.5">
+                              <button
+                                onClick={() => toggleExpanded(catKey)}
+                                className="flex h-5 w-5 items-center justify-center rounded hover:bg-muted"
+                                aria-label={catExpanded ? "Collapse" : "Expand"}
+                              >
+                                {catExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                              </button>
+                              <TriCheckbox state={catStatus} onChange={(checked) => setMany(catItems.map((item) => item.id), checked)} />
+                              <div className="flex-1 text-sm">{CATEGORY_LABELS[category]}</div>
+                              <span className="text-[11px] text-muted-foreground">{onCount}/{catItems.length}</span>
+                            </div>
+                            {catExpanded ? (
+                              <div className="space-y-0.5 border-t bg-background px-3 py-2">
+                                {catItems.map((item) => {
+                                  const isOn = selected.has(item.id);
+                                  return (
+                                    <label key={item.id} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/60">
+                                      <TriCheckbox
+                                        state={isOn ? "all" : "none"}
+                                        onChange={(checked) => setMany([item.id], checked)}
+                                      />
+                                      <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                                      <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">{item.enabled ? "on" : "off"}</span>
+                                      <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{item.kind === "path" ? "path" : "config"}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+            {groups.length === 0 ? (
+              <div className="rounded-md border bg-muted/30 p-6 text-center text-sm text-muted-foreground">No items detected in your environment.</div>
+            ) : null}
+          </div>
+        </ScrollArea>
+
+        <div className="flex items-center justify-end gap-2 border-t bg-muted/30 px-5 py-3">
+          <Button variant="outline" onClick={onCancel}>Cancel</Button>
+          <Button onClick={handleExport} disabled={totalSelected === 0}>
+            <Download className="h-4 w-4" />
+            Export {totalSelected} item{totalSelected === 1 ? "" : "s"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TriCheckbox({ state, onChange }: { state: "all" | "some" | "none"; onChange: (checked: boolean) => void }) {
+  const ref = React.useRef<HTMLInputElement | null>(null);
+  React.useEffect(() => {
+    if (ref.current) ref.current.indeterminate = state === "some";
+  }, [state]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      className="h-4 w-4 cursor-pointer accent-primary"
+      checked={state === "all"}
+      onChange={(event) => onChange(event.target.checked)}
+      onClick={(event) => event.stopPropagation()}
+    />
   );
 }
 
@@ -410,6 +736,10 @@ function formatBytes(bytes: number): string {
     unit += 1;
   }
   return `${value < 10 && unit > 0 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
+}
+
+function formatNumber(value: number): string {
+  return new Intl.NumberFormat().format(value);
 }
 
 function formatDate(value: string): string {

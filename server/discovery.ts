@@ -3,7 +3,7 @@ import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
 import { parse, stringify } from "smol-toml";
-import type { Category, ConfigEntryMeta, InventoryItem, ItemDetail, PathItemMeta, ToolName } from "./types";
+import type { Category, ConfigEntryMeta, ContextStats, InventoryItem, ItemDetail, PathItemMeta, ToolName } from "./types";
 
 const home = os.homedir();
 const projectRoot = process.cwd();
@@ -59,7 +59,8 @@ function pathItem(
   source: string,
   enabled: boolean,
   backupPath?: string,
-  validity?: { valid: boolean; invalidReason?: string }
+  validity?: { valid: boolean; invalidReason?: string },
+  context: ContextStats = emptyContextStats()
 ): InventoryItem {
   const name = labelFromPath(target);
   return {
@@ -75,7 +76,8 @@ function pathItem(
     detailAvailable: true,
     description: enabled ? target : `Backed up at ${backupPath}`,
     valid: validity?.valid ?? true,
-    invalidReason: validity?.invalidReason
+    invalidReason: validity?.invalidReason,
+    context
   };
 }
 
@@ -120,7 +122,8 @@ function configItem(
   value: unknown,
   source: string,
   enabled: boolean,
-  backupPath?: string
+  backupPath?: string,
+  context: ContextStats = emptyContextStats()
 ): InventoryItem {
   const name = keyPath[keyPath.length - 1] || labelFromPath(configPath);
   return {
@@ -135,7 +138,8 @@ function configItem(
     backupPath,
     detailAvailable: true,
     description: enabled ? `${keyPath.join(".")} in ${configPath}` : `Backed up at ${backupPath}`,
-    valid: true
+    valid: true,
+    context
   };
 }
 
@@ -178,10 +182,10 @@ async function collectPathItems(tool: ToolName, category: Category) {
         if (child.name.startsWith(".")) continue;
         const childPath = path.join(sourcePath, child.name);
         const validity = category === "skills" ? await validateSkill(childPath) : undefined;
-        items.push(pathItem(tool, category, childPath, sourcePath, true, undefined, validity));
+        items.push(pathItem(tool, category, childPath, sourcePath, true, undefined, validity, await contextForPath(childPath)));
       }
     } else {
-      items.push(pathItem(tool, category, sourcePath, path.dirname(sourcePath), true));
+      items.push(pathItem(tool, category, sourcePath, path.dirname(sourcePath), true, undefined, undefined, await contextForPath(sourcePath)));
     }
   }
   return items;
@@ -196,7 +200,7 @@ async function collectDisabledPathItems(tool: ToolName) {
     try {
       const meta = JSON.parse(await fs.readFile(metaPath, "utf8")) as PathItemMeta;
       const validity = meta.category === "skills" ? await validateSkill(meta.payloadPath) : undefined;
-      rows.push(pathItem(meta.tool, meta.category, meta.originalPath, meta.source, false, meta.payloadPath, validity));
+      rows.push(pathItem(meta.tool, meta.category, meta.originalPath, meta.source, false, meta.payloadPath, validity, await contextForPath(meta.payloadPath)));
     } catch {
       // Ignore malformed backup records; they are surfaced by filesystem inspection if restored manually.
     }
@@ -212,7 +216,7 @@ const configSources = [
   { tool: "codex" as const, path: path.join(projectRoot, ".codex", "config.toml"), format: "toml" as const }
 ];
 
-async function readConfig(configPath: string, format: "json" | "toml") {
+export async function readConfig(configPath: string, format: "json" | "toml") {
   const text = await safeRead(configPath);
   if (!text.trim()) return {};
   try {
@@ -222,11 +226,11 @@ async function readConfig(configPath: string, format: "json" | "toml") {
   }
 }
 
-function getAt(root: any, keyPath: string[]) {
+export function getAt(root: any, keyPath: string[]) {
   return keyPath.reduce((acc, key) => (acc && typeof acc === "object" ? acc[key] : undefined), root);
 }
 
-function setAt(root: any, keyPath: string[], value: unknown) {
+export function setAt(root: any, keyPath: string[], value: unknown) {
   let cursor = root;
   for (const key of keyPath.slice(0, -1)) {
     cursor[key] ??= {};
@@ -259,7 +263,7 @@ function configuredEntries(tool: ToolName, configPath: string, data: any) {
   if (hooksRoot && typeof hooksRoot === "object") {
     for (const key of Object.keys(hooksRoot)) entries.push({ category: "hooks", keyPath: ["hooks", key], value: hooksRoot[key] });
   }
-  return entries.map((entry) => configItem(tool, entry.category, configPath, entry.keyPath, entry.value, configPath, true));
+  return entries.map((entry) => configItem(tool, entry.category, configPath, entry.keyPath, entry.value, configPath, true, undefined, contextForValue(entry.value)));
 }
 
 async function collectConfigItems() {
@@ -276,7 +280,7 @@ async function collectConfigItems() {
       const backupPath = path.join(dir, child.name);
       try {
         const meta = JSON.parse(await fs.readFile(backupPath, "utf8")) as ConfigEntryMeta;
-        items.push(configItem(meta.tool, meta.category, meta.configPath, meta.keyPath, meta.value, meta.source, false, backupPath));
+        items.push(configItem(meta.tool, meta.category, meta.configPath, meta.keyPath, meta.value, meta.source, false, backupPath, contextForValue(meta.value)));
       } catch {
         // Ignore malformed backup records.
       }
@@ -306,6 +310,39 @@ async function describePath(target: string) {
     if (content.trim()) return { detail: content, detailType: candidate.endsWith(".md") ? ("markdown" as const) : ("text" as const) };
   }
   return { detail: `${target}\n\nNo README, SKILL.md, or description file was found.`, detailType: "text" as const };
+}
+
+async function contextForPath(target: string): Promise<ContextStats> {
+  const stat = await fs.stat(target);
+  if (!stat.isDirectory()) return contextForText(await safeRead(target));
+
+  const candidates = ["SKILL.md", "README.md", "readme.md", "description.md"].map((name) => path.join(target, name));
+  for (const candidate of candidates) {
+    const content = await safeRead(candidate);
+    if (content.trim()) return contextForText(content);
+  }
+  return emptyContextStats();
+}
+
+function contextForValue(value: unknown): ContextStats {
+  return contextForText(JSON.stringify(value, null, 2));
+}
+
+function contextForText(text: string): ContextStats {
+  const charsPerToken = 4;
+  const bytes = Buffer.byteLength(text, "utf8");
+  return {
+    estimatedTokens: text.length === 0 ? 0 : Math.ceil(text.length / charsPerToken),
+    characters: text.length,
+    bytes,
+    lines: text.length === 0 ? 0 : text.split(/\r\n|\r|\n/).length,
+    metric: "approx_chars_per_token",
+    charsPerToken
+  };
+}
+
+function emptyContextStats(): ContextStats {
+  return contextForText("");
 }
 
 export async function getDetail(id: string): Promise<ItemDetail | undefined> {

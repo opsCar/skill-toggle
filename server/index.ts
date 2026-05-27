@@ -54,16 +54,20 @@ app.post("/api/items/:id/toggle", async (req, res, next) => {
   }
 });
 
-app.get("/api/export", async (_req, res, next) => {
+async function handleExport(req: express.Request, res: express.Response, next: express.NextFunction) {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const filename = `skill-toggle-export-${stamp}.tar.gz`;
-  const tmpPath = path.join(os.tmpdir(), filename);
+  const body = (req.body ?? {}) as { filename?: unknown; itemIds?: unknown };
+  const rawFilename = typeof body.filename === "string" && body.filename.trim() ? body.filename.trim() : `skill-toggle-export-${stamp}.tar.gz`;
+  const safeFilename = sanitizeFilename(rawFilename, stamp);
+  const itemIds = Array.isArray(body.itemIds) ? body.itemIds.filter((id): id is string => typeof id === "string") : undefined;
+  const tmpPath = path.join(os.tmpdir(), `skill-toggle-export-tmp-${stamp}-${process.pid}.tar.gz`);
   try {
-    const summary = await writeExportArchive(tmpPath);
+    const summary = await writeExportArchive(tmpPath, itemIds);
     res.setHeader("Content-Type", "application/gzip");
     res.setHeader("Content-Length", String(summary.bytes));
-    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${safeFilename}"`);
     res.setHeader("X-Skill-Toggle-Sources", summary.sources.join(","));
+    res.setHeader("X-Skill-Toggle-Filename", safeFilename);
     const stream = createReadStream(tmpPath);
     stream.on("close", () => {
       void fs.rm(tmpPath, { force: true });
@@ -77,7 +81,17 @@ app.get("/api/export", async (_req, res, next) => {
     await fs.rm(tmpPath, { force: true }).catch(() => undefined);
     next(error);
   }
-});
+}
+
+function sanitizeFilename(input: string, stamp: string): string {
+  const cleaned = input.replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^_+|_+$/g, "");
+  const base = cleaned.length > 0 ? cleaned : `skill-toggle-export-${stamp}`;
+  return /\.(tar\.gz|tgz)$/i.test(base) ? base : `${base}.tar.gz`;
+}
+
+
+app.get("/api/export", handleExport);
+app.post("/api/export", handleExport);
 
 app.post("/api/import", express.raw({ type: ["application/gzip", "application/x-gzip", "application/octet-stream"], limit: "5gb" }), async (req, res, next) => {
   const body = req.body as Buffer | undefined;
