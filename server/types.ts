@@ -14,6 +14,8 @@ export interface InventoryItem {
   path?: string;
   backupPath?: string;
   detailAvailable: boolean;
+  valid: boolean;
+  invalidReason?: string;
 }
 
 export interface ItemDetail extends InventoryItem {

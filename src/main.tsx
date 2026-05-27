@@ -21,6 +21,8 @@ interface InventoryItem {
   path?: string;
   backupPath?: string;
   detailAvailable: boolean;
+  valid: boolean;
+  invalidReason?: string;
 }
 
 interface ItemDetail extends InventoryItem {
@@ -94,12 +96,20 @@ function App() {
     return matchesCategory && matchesTool && haystack.includes(query.toLowerCase());
   });
 
-  const counts = items.reduce<Record<string, number>>((acc, item) => {
+  const itemsForTool = tool === "all" ? items : items.filter((item) => item.tool === tool);
+
+  const categoryCounts = itemsForTool.reduce<Record<string, number>>((acc, item) => {
     acc[item.category] = (acc[item.category] ?? 0) + 1;
-    acc[item.tool] = (acc[item.tool] ?? 0) + 1;
-    acc.enabled = (acc.enabled ?? 0) + Number(item.enabled);
     return acc;
   }, {});
+
+  const toolTotals = items.reduce<Record<string, number>>((acc, item) => {
+    acc[item.tool] = (acc[item.tool] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const enabledCount = items.reduce((acc, item) => acc + Number(item.enabled), 0);
+  const invalidSkillCount = itemsForTool.filter((item) => item.category === "skills" && !item.valid).length;
 
   return (
     <main className="min-h-screen">
@@ -108,7 +118,7 @@ function App() {
           <div>
             <h1 className="text-2xl font-semibold tracking-normal">Skill Toggle</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {items.length} items · {counts.enabled ?? 0} enabled · {counts.claude ?? 0} Claude Code · {counts.codex ?? 0} Codex
+              {items.length} items · {enabledCount} enabled · {toolTotals.claude ?? 0} Claude Code · {toolTotals.codex ?? 0} Codex
             </p>
           </div>
           <Button variant="outline" onClick={() => void loadItems()} disabled={loading}>
@@ -137,7 +147,7 @@ function App() {
                   <Icon className="h-4 w-4" />
                   {label}
                 </span>
-                <span>{key === "all" ? items.length : counts[key] ?? 0}</span>
+                <span>{key === "all" ? itemsForTool.length : categoryCounts[key] ?? 0}</span>
               </button>
             ))}
           </div>
@@ -180,7 +190,14 @@ function App() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="truncate text-sm font-medium">{item.name}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate text-sm font-medium">{item.name}</span>
+                          {item.category === "skills" && !item.valid ? (
+                            <span className="shrink-0 rounded-sm border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-destructive">
+                              invalid
+                            </span>
+                          ) : null}
+                        </div>
                         <div className="mt-1 flex flex-wrap gap-1 text-xs text-muted-foreground">
                           <span className="rounded-sm bg-muted px-1.5 py-0.5">{item.tool}</span>
                           <span className="rounded-sm bg-muted px-1.5 py-0.5">{item.category}</span>
@@ -189,7 +206,9 @@ function App() {
                       </div>
                       <span className={`mt-0.5 h-2.5 w-2.5 rounded-full ${item.enabled ? "bg-primary" : "bg-muted-foreground"}`} />
                     </div>
-                    <div className="mt-2 truncate text-xs text-muted-foreground">{item.description}</div>
+                    <div className="mt-2 truncate text-xs text-muted-foreground">
+                      {item.category === "skills" && !item.valid ? item.invalidReason ?? "Skill is invalid" : item.description}
+                    </div>
                   </button>
                 ))
               )}
@@ -205,8 +224,18 @@ function App() {
                   <div className="flex items-center gap-2">
                     <h2 className="truncate text-xl font-semibold">{selected.name}</h2>
                     {selected.enabled ? <Check className="h-4 w-4 text-primary" /> : null}
+                    {selected.category === "skills" && !selected.valid ? (
+                      <span className="rounded-sm border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-destructive">
+                        invalid
+                      </span>
+                    ) : null}
                   </div>
                   <div className="mt-1 truncate text-sm text-muted-foreground">{selected.path ?? selected.backupPath}</div>
+                  {selected.category === "skills" && !selected.valid ? (
+                    <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                      {selected.invalidReason ?? "Skill is invalid"}
+                    </div>
+                  ) : null}
                 </div>
                 <div className="flex items-center gap-3 rounded-md border bg-card px-3 py-2">
                   <span className="text-sm">{selected.enabled ? "Enabled" : "Disabled"}</span>

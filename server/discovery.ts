@@ -52,7 +52,15 @@ async function listChildren(dir: string) {
   }
 }
 
-function pathItem(tool: ToolName, category: Category, target: string, source: string, enabled: boolean, backupPath?: string): InventoryItem {
+function pathItem(
+  tool: ToolName,
+  category: Category,
+  target: string,
+  source: string,
+  enabled: boolean,
+  backupPath?: string,
+  validity?: { valid: boolean; invalidReason?: string }
+): InventoryItem {
   const name = labelFromPath(target);
   return {
     id: idFor(["path", tool, category, target]),
@@ -65,8 +73,43 @@ function pathItem(tool: ToolName, category: Category, target: string, source: st
     path: enabled ? target : undefined,
     backupPath,
     detailAvailable: true,
-    description: enabled ? target : `Backed up at ${backupPath}`
+    description: enabled ? target : `Backed up at ${backupPath}`,
+    valid: validity?.valid ?? true,
+    invalidReason: validity?.invalidReason
   };
+}
+
+// A valid skill is a directory containing a readable SKILL.md whose YAML
+// frontmatter declares both `name` and `description`. See:
+// https://docs.claude.com/en/docs/claude-code/skills
+async function validateSkill(target: string): Promise<{ valid: boolean; invalidReason?: string }> {
+  let stat;
+  try {
+    stat = await fs.stat(target);
+  } catch (err) {
+    return { valid: false, invalidReason: `Path is unreadable (${(err as NodeJS.ErrnoException).code ?? "ENOENT"})` };
+  }
+  if (!stat.isDirectory()) return { valid: false, invalidReason: "Skill entry is not a directory" };
+
+  const skillFile = path.join(target, "SKILL.md");
+  let content: string;
+  try {
+    content = await fs.readFile(skillFile, "utf8");
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return { valid: false, invalidReason: "Missing SKILL.md" };
+    return { valid: false, invalidReason: `SKILL.md unreadable (${code ?? "error"})` };
+  }
+
+  const frontmatterMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!frontmatterMatch) return { valid: false, invalidReason: "SKILL.md is missing YAML frontmatter" };
+
+  const block = frontmatterMatch[1];
+  const hasField = (field: string) => new RegExp(`^${field}:\\s*(\\S|[|>])`, "m").test(block);
+  if (!hasField("name")) return { valid: false, invalidReason: "SKILL.md frontmatter is missing required field: name" };
+  if (!hasField("description")) return { valid: false, invalidReason: "SKILL.md frontmatter is missing required field: description" };
+
+  return { valid: true };
 }
 
 function configItem(
@@ -91,7 +134,8 @@ function configItem(
     path: enabled ? configPath : undefined,
     backupPath,
     detailAvailable: true,
-    description: enabled ? `${keyPath.join(".")} in ${configPath}` : `Backed up at ${backupPath}`
+    description: enabled ? `${keyPath.join(".")} in ${configPath}` : `Backed up at ${backupPath}`,
+    valid: true
   };
 }
 
@@ -132,7 +176,9 @@ async function collectPathItems(tool: ToolName, category: Category) {
       const children = await listChildren(sourcePath);
       for (const child of children) {
         if (child.name.startsWith(".")) continue;
-        items.push(pathItem(tool, category, path.join(sourcePath, child.name), sourcePath, true));
+        const childPath = path.join(sourcePath, child.name);
+        const validity = category === "skills" ? await validateSkill(childPath) : undefined;
+        items.push(pathItem(tool, category, childPath, sourcePath, true, undefined, validity));
       }
     } else {
       items.push(pathItem(tool, category, sourcePath, path.dirname(sourcePath), true));
@@ -149,7 +195,8 @@ async function collectDisabledPathItems(tool: ToolName) {
     const metaPath = path.join(dir, child.name, "meta.json");
     try {
       const meta = JSON.parse(await fs.readFile(metaPath, "utf8")) as PathItemMeta;
-      rows.push(pathItem(meta.tool, meta.category, meta.originalPath, meta.source, false, meta.payloadPath));
+      const validity = meta.category === "skills" ? await validateSkill(meta.payloadPath) : undefined;
+      rows.push(pathItem(meta.tool, meta.category, meta.originalPath, meta.source, false, meta.payloadPath, validity));
     } catch {
       // Ignore malformed backup records; they are surfaced by filesystem inspection if restored manually.
     }
