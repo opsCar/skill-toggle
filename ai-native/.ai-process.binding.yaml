@@ -1,0 +1,281 @@
+binding_version: 2
+
+repository:
+  # EN: Repository identity used in dashboards, run metadata, and generated artifacts.
+  # ZH: 仓库身份信息，用于仪表盘、运行状态和生成的流程产物。
+  name: skill-toggle
+  default_branch: main
+  owners: []
+
+process_core:
+  # EN: Pin the process package version consumed by this repository.
+  # ZH: 固定本仓库使用的 AI-Native 流程包版本。
+  version: draft-v0.1.0
+  # EN: standard keeps the full governed lifecycle enabled.
+  # ZH: standard 表示启用完整治理流程。
+  profile: standard
+  distribution_id: ai-process-core
+  # EN: false = single-agent direct mode; true = multi-host executor handoff mode.
+  # ZH: false 表示单 Agent 直接执行；true 表示多宿主 executor 交接模式。
+  require_executor_handoff: false
+  # EN: Approval UX target. All hosts (codex, cursor) use chat-based approval: the agent
+  #     emits file:// links to the stage's artifacts plus a plain-language summary in chat,
+  #     then waits for the user's "approve | revise | reject" reply. Host-native popups are
+  #     not used. See skills/risk-approval/SKILL.md section B.
+  # ZH: 审批交互宿主。所有宿主（codex / cursor）都走聊天审批：agent 在聊天里发出该阶段
+  #     产物的 file:// 链接和普通话总结，然后等用户回复 approve | revise | reject。
+  #     不再使用宿主原生弹窗。详见 skills/risk-approval/SKILL.md B 节。
+  host: codex
+  # EN: none means implementation is not forced into TDD/DDD.
+  # ZH: none 表示实现阶段不强制 TDD/DDD。
+  development_protocol: none
+
+enabled_stages:
+  # EN: Full lifecycle. Each stage must complete before the next starts.
+  # ZH: 完整生命周期。每个阶段完成后才能进入下一阶段。
+  - intake
+  - clarify
+  - security
+  - spec
+  - implement
+  - verify
+  - archive
+  - learn
+
+repo_layout:
+  # EN: Repository-local AI-Native layout.
+  # ZH: 本仓库内 AI-Native 目录布局。
+  package_root: ai-native
+  knowledge_root: ai-native/docs/ai-index
+  runtime_root: ai-native/runtime/ai-process
+  skills_root: ai-native/skills
+
+validation_entrypoints:
+  # EN: Optional repo commands used by gates. Empty means no repo-specific command is configured.
+  # ZH: 可选的仓库校验命令。留空表示未配置仓库自定义命令。
+  manifest_check: []
+  index_refresh_check: []
+  verify_checks: []
+
+rule_files:
+  # EN: Repository-local policy overrides.
+  # ZH: 仓库本地策略覆盖文件。
+  risk_overrides: ai-native/rules/risk-overrides.yaml
+  security_overrides: ai-native/rules/security/security-overrides.md
+
+commit_policy:
+  # EN: The agent records commits when present but does not create commits automatically.
+  # ZH: Agent 会记录已有提交，但不会自动创建提交。
+  mode: none
+  record_commits_as_events: true
+  require_commit_for_review: false
+  require_commit_for_approval: false
+
+review_policy:
+  # EN: Human review before verify is optional unless stage_review_policy requires it.
+  # ZH: verify 前人工 review 默认不强制，除非 stage_review_policy 要求。
+  require_human_review_before_verify: false
+
+stage_review_policy:
+  # EN: Stage boundary approvals are enabled so the user confirms each process boundary.
+  # ZH: 阶段边界审批默认开启，确保用户确认每个流程边界。
+  # EN: stay_blocked stops until approval; rework repeats the stage using rejection feedback.
+  # ZH: stay_blocked 表示停在当前阶段；rework 表示根据拒绝原因重做该阶段。
+  intake:
+    require_human_approval_before_advance: true
+    rejection_action: stay_blocked
+    max_rework_attempts: 3
+  clarify:
+    require_human_approval_before_advance: true
+    rejection_action: rework
+    max_rework_attempts: 0 # 0 = unlimited / 无限重做直到用户满意
+  security:
+    require_human_approval_before_advance: true
+    rejection_action: rework
+    max_rework_attempts: 3
+  spec:
+    require_human_approval_before_advance: true
+    rejection_action: stay_blocked
+    max_rework_attempts: 3
+  implement:
+    require_human_approval_before_advance: true
+    rejection_action: stay_blocked
+    max_rework_attempts: 3
+  verify:
+    require_human_approval_before_advance: true
+    require_commit_checkpoint: false
+    rejection_action: stay_blocked
+    max_rework_attempts: 3
+  archive:
+    require_human_approval_before_advance: true
+    rejection_action: stay_blocked
+    max_rework_attempts: 3
+  learn:
+    require_human_approval_before_advance: true
+    rejection_action: stay_blocked
+    max_rework_attempts: 3
+
+openspec:
+  # EN: Enable OpenSpec bridge when openspec/config.yaml exists.
+  # ZH: 当仓库存在 openspec/config.yaml 时启用 OpenSpec 桥接。
+  enabled: true
+  change_name_source: run_id_suffix
+  max_change_name_length: 50
+  clarify_stage:
+    # EN: Read existing OpenSpec context during clarify.
+    # ZH: clarify 阶段读取已有 OpenSpec 上下文。
+    investigate: true
+  spec_stage:
+    # EN: Generate proposal/design/tasks and inject security constraints.
+    # ZH: 生成 proposal/design/tasks，并注入安全约束。
+    generate_artifacts: true
+    inject_security_constraints: true
+  implement_stage:
+    # EN: Use OpenSpec apply instructions and sync task state back into the run.
+    # ZH: 使用 OpenSpec 实施说明，并把任务状态同步回 run。
+    load_apply_instructions: true
+    security_task_audit: true
+    sync_tasks_on_complete: true
+  archive_stage:
+    # EN: Archive OpenSpec changes when the AI-Native run archives.
+    # ZH: AI-Native 归档时同步归档 OpenSpec change。
+    archive_change: true
+    sync_delta_specs: prompt
+
+jira_integration:
+  # EN: true forces the pre-run Jira decision before start_run.py.
+  # ZH: true 表示 start_run.py 前必须询问“关联已有 Jira / 新建 Jira / 跳过 Jira”。
+  enabled: true
+  # EN: Project used when the user chooses to create a new Jira issue.
+  # ZH: 用户选择新建 Jira 时使用的项目 key；填错会导致创建失败。
+  project_key: "ZOOM"
+  # EN: Prefer DevHelper MCP because local helper CLI may be killed by Codex/Cursor sandbox.
+  # ZH: 优先使用 DevHelper MCP，因为本地 helper CLI 可能被 Codex/Cursor sandbox kill。
+  transport_preference:
+    - mcp
+    - helper_cli
+  create_issue:
+    # EN/ZH: Default issue type for new Jira issues / 新建 Jira 的默认 issue 类型。
+    issue_type: "Task"
+    # EN: Summary stays one line; description carries the engineering-driven task questions.
+    # ZH: Summary 保持单行；Description 承载工程驱动任务的标准问题回答。
+    summary_format: "{task_type}: {short_summary}"
+    engineering_task_description:
+      enabled: true
+      rendering: jira_safe_plain_text
+      required_questions:
+        - "What is the problem? State the problem you are trying to solve."
+        - "What is the root cause? Describe what is the root cause of the problem."
+        - "Success criteria (DoD) What are the criteria to measure the success of the solution."
+        - "How does it Impacts the user experiences? If user experiences is impacted, please work with PM and review with UE/UX."
+        - "Additional Information: List monitoring, logging, controls, dependencies and other related information."
+    additional_properties:
+      zoom_module:
+        # EN/ZH: ZOOM Task required field "Zoom Module".
+        field_key: "customfield_13244"
+        value: "TestZoom"
+      platform_os:
+        # EN/ZH: ZOOM Task required field "Platform OS".
+        field_key: "customfield_14917"
+        inference: ai
+        default: "All"
+        allowed_values:
+          - "All"
+          - "Mac"
+          - "Windows"
+          - "Linux"
+          - "visionOS"
+          - "Android"
+          - "iOS"
+          - "iPadOS"
+      task_type:
+        # EN/ZH: ZOOM Task required field "Task Type".
+        field_key: "customfield_12821"
+        inference: ai
+        default: "Technical Enhancement"
+        allowed_values:
+          - "New Feature"
+          - "UX Enhancement"
+          - "Security Enhancement"
+          - "Technical Enhancement"
+          - "Feature Release Control"
+  # EN: true blocks runs without Jira; false allows an explicit skip.
+  # ZH: true 表示没有 Jira 不允许开始；false 表示允许用户显式跳过。
+  require_jira: true
+  spec_writeback:
+    transition_to: "Ready for Security Review"
+    transition_name: "technical design + threat model (if applicable) ready"
+    prerequisite_transition:
+      from_status: "Open"
+      transition_to: "In Progress"
+      transition_name: "In Progress"
+    description:
+      update_when_sparse: true
+      rendering: jira_safe_plain_text
+      sparse_if_missing:
+        - owner
+        - acceptance_criteria
+        - scenario
+    technical_design:
+      field_key: "customfield_12712"
+      field_type: "url"
+      value_source: "jira_issue_url"
+      template: "zoom_technical_design_spec"
+      comment_contains_rendered_design: true
+      update: false
+    security_owner:
+      field_key: "customfield_12892"
+      preserve_existing: true
+    risk_analysis:
+      default_answer: "No"
+      fields:
+        new_personal_data:
+          field_key: "customfield_15634"
+          question: "Does this feature collect or process NEW personal data from individuals?"
+        existing_personal_data_new_use:
+          field_key: "customfield_15635"
+          question: "Does this feature process Personal Data Zoom already collected for new purposes or store that data in a new logical storage location?"
+        third_party_security_bypass:
+          field_key: "customfield_15636"
+          question: "Does this feature result in the bypass of 3rd-party security protections?"
+        architecture_change:
+          field_key: "customfield_15637"
+          question: "Does this feature introduce significant changes to the system architecture?"
+        security_controls_change:
+          field_key: "customfield_15638"
+          question: "Does this feature introduce significant changes to security controls or the software components?"
+        ai_ml_change:
+          field_key: "customfield_15639"
+          question: "Does this feature introduce any significant changes to artificial intelligence (AI) or machine learning (ML) systems or features?"
+        physical_features_processing:
+          field_key: "customfield_15886"
+          question: "Will this feature use any technology to analyze or process data associated with a user's face, hands, voice or other physical features?"
+        api_or_authz_change:
+          field_key: "customfield_17370"
+          question: "Does this feature introduce any new API, endpoint, or changes to an existing API's auth/z or permission structure?"
+        china_ai_model_reliance:
+          field_key: "customfield_25604"
+          question: "Does this feature directly rely on AI models developed, maintained or distributed by organizations in China, or directly include code generated using such models?"
+  writeback:
+    # EN/ZH: Intake writes intent summary and tries Open -> In Progress.
+    intake: true
+    # EN/ZH: Spec backfills Description, Technical Design, Risk Analysis fields, then transitions review status.
+    spec: true
+    # EN/ZH: Implement writes effort estimate; it does not change Jira status.
+    implement: true
+    # EN/ZH: Learn writes MR checklist and release/CC guidance.
+    learn: true
+  # EN: Release policy used by learn stage for code-freeze and CC checks.
+  # ZH: learn 阶段用于判断 code freeze / CC 的发布策略文件。
+  release_policy_path: "ai-native/rules/release-policy.yaml"
+
+stage_overrides:
+  verify:
+    # EN: Extra verify-stage gates and artifacts.
+    # ZH: verify 阶段额外 gate 和必需产物。
+    additional_gates:
+      - evidence_recorded
+    required_artifacts:
+      - verification_report
+      - evidence_ledger_entry
+    repo_checks: []

@@ -1,0 +1,20 @@
+{
+  "manifest_refs": ["ai-native/docs/ai-index/global-manifest.yaml"],
+  "flow_refs": [
+    "ai-native/docs/ai-index/flows/inventory-discovery.flow.md",
+    "ai-native/docs/ai-index/flows/toggle-backup-restore.flow.md"
+  ],
+  "module_refs": [
+    "ai-native/docs/ai-index/modules/app-shell.module.md",
+    "ai-native/docs/ai-index/modules/async-cli-reference.module.md"
+  ],
+  "scoped_paths": [
+    "package.json",
+    "src",
+    "server",
+    "tests",
+    "components.json",
+    "tailwind.config.ts",
+    "vite.config.ts"
+  ]
+}

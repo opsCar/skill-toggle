@@ -1,0 +1,5 @@
+{"artifact":"global-manifest.yaml","evidence":["package.json","async-cli/README.md","ai-native/.ai-process.binding.yaml"],"recorded_at":"2026-05-27T02:02:33Z","summary":"Initial full-scope routing map for skill-toggle app task."}
+{"artifact":"modules/app-shell.module.md","evidence":["package.json","ai-native/.ai-process.binding.yaml"],"recorded_at":"2026-05-27T02:02:33Z","summary":"Root app shell and process files are the primary implementation surface."}
+{"artifact":"modules/async-cli-reference.module.md","evidence":["async-cli/README.md","async-cli/file-cli/package.json"],"recorded_at":"2026-05-27T02:02:33Z","summary":"Embedded async-cli checkout is reference-only for local tool conventions."}
+{"artifact":"flows/inventory-discovery.flow.md","evidence":["task request","package.json"],"recorded_at":"2026-05-27T02:02:33Z","summary":"Discovery flow covers skills, MCP, hooks, and rules from Claude Code and Codex."}
+{"artifact":"flows/toggle-backup-restore.flow.md","evidence":["task request"],"recorded_at":"2026-05-27T02:02:33Z","summary":"Toggle flow moves active items to ~/.claude_bak or ~/.codex_bak and restores them."}
