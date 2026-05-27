@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { createReadStream } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { applyImportArchive, writeExportArchive } from "./archive";
+import { appendImportArchive, applyImportArchive, inspectImportArchive, writeExportArchive } from "./archive";
 import { getDetail, listInventory, toggleItem } from "./discovery";
 import { getUsageSummary } from "./usage";
 
@@ -12,6 +12,7 @@ const app = express();
 const port = Number(process.env.PORT ?? process.env.SKILL_TOGGLE_API_PORT ?? 4127);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distDir = path.resolve(__dirname, "..", "dist");
+const importSessions = new Map<string, { path: string; createdAt: number }>();
 
 app.use(express.json({ limit: "1mb" }));
 
@@ -110,6 +111,59 @@ app.post("/api/import", express.raw({ type: ["application/gzip", "application/x-
     await fs.rm(tmpPath, { force: true }).catch(() => undefined);
   }
 });
+
+app.post("/api/import/inspect", express.raw({ type: ["application/gzip", "application/x-gzip", "application/octet-stream"], limit: "5gb" }), async (req, res, next) => {
+  const body = req.body as Buffer | undefined;
+  if (!body || body.length === 0) {
+    res.status(400).json({ error: "Empty upload — send the tar.gz as the raw request body" });
+    return;
+  }
+  const token = cryptoRandomToken();
+  const tmpPath = path.join(os.tmpdir(), `skill-toggle-import-session-${token}.tar.gz`);
+  try {
+    await fs.writeFile(tmpPath, body);
+    const inspection = await inspectImportArchive(tmpPath);
+    importSessions.set(token, { path: tmpPath, createdAt: Date.now() });
+    cleanupImportSessions();
+    res.json({ token, ...inspection });
+  } catch (error) {
+    await fs.rm(tmpPath, { force: true }).catch(() => undefined);
+    next(error);
+  }
+});
+
+app.post("/api/import/append", async (req, res, next) => {
+  const body = (req.body ?? {}) as { token?: unknown; itemIds?: unknown };
+  const token = typeof body.token === "string" ? body.token : "";
+  const session = importSessions.get(token);
+  if (!session) {
+    res.status(400).json({ error: "Import session expired. Pick the archive again." });
+    return;
+  }
+  const itemIds = Array.isArray(body.itemIds) ? body.itemIds.filter((id): id is string => typeof id === "string") : [];
+  try {
+    const summary = await appendImportArchive(session.path, itemIds);
+    importSessions.delete(token);
+    await fs.rm(session.path, { force: true }).catch(() => undefined);
+    res.json(summary);
+  } catch (error) {
+    next(error);
+  }
+});
+
+function cryptoRandomToken() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function cleanupImportSessions() {
+  const expiresAt = Date.now() - 30 * 60 * 1000;
+  for (const [token, session] of importSessions.entries()) {
+    if (session.createdAt < expiresAt) {
+      importSessions.delete(token);
+      void fs.rm(session.path, { force: true });
+    }
+  }
+}
 
 app.use(express.static(distDir));
 app.use((req, res, next) => {

@@ -26,6 +26,18 @@ interface InventoryItem {
   context: ContextStats;
 }
 
+interface ArchiveImportItem extends InventoryItem {
+  archivePath: string;
+  destinationPath: string;
+  keyPath?: string[];
+}
+
+interface ImportInspection {
+  token: string;
+  sources: string[];
+  items: ArchiveImportItem[];
+}
+
 interface ItemDetail extends InventoryItem {
   detail: string;
   detailType: "markdown" | "json" | "text" | "none";
@@ -74,6 +86,8 @@ function App() {
   const [usageById, setUsageById] = React.useState<Record<string, UsageStats>>({});
   const [usageLoading, setUsageLoading] = React.useState(false);
   const [exportOpen, setExportOpen] = React.useState(false);
+  const [importFile, setImportFile] = React.useState<File | null>(null);
+  const [importInspection, setImportInspection] = React.useState<ImportInspection | null>(null);
   const importInputRef = React.useRef<HTMLInputElement>(null);
 
   const loadItems = React.useCallback(async () => {
@@ -181,15 +195,12 @@ function App() {
     }
   }
 
-  async function importArchive(file: File) {
-    const confirmed = window.confirm(
-      `Import ${file.name} (${formatBytes(file.size)})?\n\nThis will REPLACE ~/.claude and ~/.codex with the archive's contents. ` +
-        "Your current setup will be saved to ~/.skill-toggle-backups/ as a tar.gz before anything is overwritten."
-    );
-    if (!confirmed) return;
+  async function replaceImportArchive(file: File) {
     setBusy(true);
     setError("");
-    setStatus(`Importing ${file.name} — backing up current env first...`);
+    setImportFile(null);
+    setImportInspection(null);
+    setStatus(`Replacing env from ${file.name} — backing up current env first...`);
     try {
       const response = await fetch("/api/import", {
         method: "POST",
@@ -198,7 +209,7 @@ function App() {
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Import failed");
-      setStatus(`Imported ${data.restoredSources?.join(", ") ?? "archive"}. Pre-import backup at ${data.preImportBackup}.`);
+      setStatus(`Replaced env from ${data.restoredSources?.join(", ") ?? "archive"}. Pre-import backup at ${data.preImportBackup}.`);
       await loadItems();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Import failed");
@@ -208,10 +219,60 @@ function App() {
     }
   }
 
+  async function inspectImportArchive(file: File) {
+    setBusy(true);
+    setError("");
+    setStatus(`Scanning ${file.name}...`);
+    try {
+      const response = await fetch("/api/import/inspect", {
+        method: "POST",
+        headers: { "Content-Type": "application/gzip" },
+        body: file
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Archive scan failed");
+      setImportInspection(data);
+      setStatus(`Scanned ${file.name}: ${data.items?.length ?? 0} importable items.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Archive scan failed");
+      setStatus("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function appendImportArchive(token: string, itemIds: string[]) {
+    setBusy(true);
+    setError("");
+    setStatus(`Appending ${itemIds.length} item${itemIds.length === 1 ? "" : "s"} from archive...`);
+    try {
+      const response = await fetch("/api/import/append", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, itemIds })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Append import failed");
+      setImportFile(null);
+      setImportInspection(null);
+      setStatus(`Appended ${data.appendedItems?.length ?? itemIds.length} item${(data.appendedItems?.length ?? itemIds.length) === 1 ? "" : "s"} from archive.`);
+      await loadItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Append import failed");
+      setStatus("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function onImportPicked(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (file) void importArchive(file);
+    if (file) {
+      setImportFile(file);
+      setImportInspection(null);
+      setError("");
+    }
   }
 
   const filtered = items.filter((item) => {
@@ -438,6 +499,22 @@ function App() {
           items={items}
           onCancel={() => setExportOpen(false)}
           onExport={(selection) => void runExport(selection)}
+        />
+      ) : null}
+      {importFile ? (
+        <ImportDialog
+          file={importFile}
+          inspection={importInspection}
+          busy={busy}
+          onCancel={() => {
+            setImportFile(null);
+            setImportInspection(null);
+          }}
+          onReplace={() => void replaceImportArchive(importFile)}
+          onInspect={() => void inspectImportArchive(importFile)}
+          onAppend={(itemIds) => {
+            if (importInspection) void appendImportArchive(importInspection.token, itemIds);
+          }}
         />
       ) : null}
     </main>
@@ -707,6 +784,241 @@ function ExportDialog({
       </div>
     </div>
   );
+}
+
+function ImportDialog({
+  file,
+  inspection,
+  busy,
+  onCancel,
+  onReplace,
+  onInspect,
+  onAppend
+}: {
+  file: File;
+  inspection: ImportInspection | null;
+  busy: boolean;
+  onCancel: () => void;
+  onReplace: () => void;
+  onInspect: () => void;
+  onAppend: (itemIds: string[]) => void;
+}) {
+  const [mode, setMode] = React.useState<"replace" | "append">("replace");
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set(["tool:claude", "tool:codex"]));
+
+  React.useEffect(() => {
+    if (inspection) setSelected(new Set(inspection.items.map((item) => item.id)));
+  }, [inspection]);
+
+  const groups = React.useMemo(() => groupItems(inspection?.items ?? []), [inspection]);
+  const totalSelected = selected.size;
+
+  function setMany(ids: string[], wanted: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (wanted) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }
+
+  function toggleExpanded(key: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
+      <div className="flex w-full max-w-3xl flex-col overflow-hidden rounded-lg border bg-card shadow-xl">
+        <div className="flex items-start justify-between gap-4 border-b px-5 py-4">
+          <div>
+            <h2 className="text-lg font-semibold">Import archive</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {file.name} · {formatBytes(file.size)}
+            </p>
+          </div>
+          <button onClick={onCancel} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Close">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="grid gap-3 border-b px-5 py-4 sm:grid-cols-2">
+          <button
+            className={`rounded-md border p-3 text-left ${mode === "replace" ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
+            onClick={() => setMode("replace")}
+          >
+            <div className="text-sm font-medium">Replace current</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              Completely replace local Claude/Codex env with this archive. A pre-import backup is created first.
+            </div>
+          </button>
+          <button
+            className={`rounded-md border p-3 text-left ${mode === "append" ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
+            onClick={() => setMode("append")}
+          >
+            <div className="text-sm font-medium">Append selected</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              Scan the archive and add only selected skills, MCP entries, hooks, or rules to the current env.
+            </div>
+          </button>
+        </div>
+
+        {mode === "replace" ? (
+          <div className="px-5 py-5 text-sm text-muted-foreground">
+            This mode replaces the archive's top-level env folders, including matching disabled-item backups, after writing a backup tar under
+            <span className="font-mono"> ~/.skill-toggle-backups/</span>.
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center justify-between border-b px-5 py-2 text-xs">
+              <span className="text-muted-foreground">
+                {inspection ? `${totalSelected} of ${inspection.items.length} archive items selected` : "Scan the tar archive before selecting items."}
+              </span>
+              {inspection ? (
+                <div className="flex items-center gap-2">
+                  <button className="rounded-md border px-2 py-1 hover:bg-muted" onClick={() => setSelected(new Set(inspection.items.map((item) => item.id)))}>
+                    Select all
+                  </button>
+                  <button className="rounded-md border px-2 py-1 hover:bg-muted" onClick={() => setSelected(new Set())}>
+                    Clear
+                  </button>
+                </div>
+              ) : null}
+            </div>
+            <ScrollArea className="h-[420px]">
+              <div className="px-5 py-3">
+                {!inspection ? (
+                  <div className="rounded-md border bg-muted/30 p-6 text-center text-sm text-muted-foreground">Archive contents have not been scanned yet.</div>
+                ) : groups.length === 0 ? (
+                  <div className="rounded-md border bg-muted/30 p-6 text-center text-sm text-muted-foreground">No importable items found in this archive.</div>
+                ) : (
+                  groups.map(({ tool, categories: catGroups }) => {
+                    const toolItems = catGroups.flatMap((group) => group.items);
+                    const toolKey = `tool:${tool}`;
+                    const toolStatus = selectedState(toolItems, selected);
+                    const isExpanded = expanded.has(toolKey);
+                    return (
+                      <div key={tool} className="mb-3 rounded-md border">
+                        <div className="flex items-center gap-2 border-b px-3 py-2">
+                          <button
+                            onClick={() => toggleExpanded(toolKey)}
+                            className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted"
+                            aria-label={isExpanded ? "Collapse" : "Expand"}
+                          >
+                            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                          </button>
+                          <TriCheckbox state={toolStatus} onChange={(checked) => setMany(toolItems.map((item) => item.id), checked)} />
+                          <div className="flex-1 text-sm font-medium">{TOOL_LABELS[tool]}</div>
+                          <span className="text-xs text-muted-foreground">{toolItems.filter((item) => selected.has(item.id)).length}/{toolItems.length}</span>
+                        </div>
+                        {isExpanded ? (
+                          <div className="space-y-1 px-3 py-2">
+                            {catGroups.map(({ category, items: catItems }) => {
+                              const catKey = `cat:${tool}:${category}`;
+                              const catExpanded = expanded.has(catKey);
+                              const catStatus = selectedState(catItems, selected);
+                              return (
+                                <div key={category} className="rounded-md border bg-muted/20">
+                                  <div className="flex items-center gap-2 px-3 py-1.5">
+                                    <button
+                                      onClick={() => toggleExpanded(catKey)}
+                                      className="flex h-5 w-5 items-center justify-center rounded hover:bg-muted"
+                                      aria-label={catExpanded ? "Collapse" : "Expand"}
+                                    >
+                                      {catExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                    </button>
+                                    <TriCheckbox state={catStatus} onChange={(checked) => setMany(catItems.map((item) => item.id), checked)} />
+                                    <div className="flex-1 text-sm">{CATEGORY_LABELS[category]}</div>
+                                    <span className="text-[11px] text-muted-foreground">{catItems.filter((item) => selected.has(item.id)).length}/{catItems.length}</span>
+                                  </div>
+                                  {catExpanded ? (
+                                    <div className="space-y-0.5 border-t bg-background px-3 py-2">
+                                      {catItems.map((item) => {
+                                        const isOn = selected.has(item.id);
+                                        return (
+                                          <label key={item.id} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/60">
+                                            <TriCheckbox state={isOn ? "all" : "none"} onChange={(checked) => setMany([item.id], checked)} />
+                                            <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                                            <span className="truncate text-xs text-muted-foreground">{item.archivePath}</span>
+                                            <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{item.kind === "path" ? "path" : "config"}</span>
+                                          </label>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </ScrollArea>
+          </>
+        )}
+
+        <div className="flex items-center justify-end gap-2 border-t bg-muted/30 px-5 py-3">
+          <Button variant="outline" onClick={onCancel}>Cancel</Button>
+          {mode === "replace" ? (
+            <Button onClick={onReplace} disabled={busy}>
+              <Upload className="h-4 w-4" />
+              Replace current
+            </Button>
+          ) : !inspection ? (
+            <Button onClick={onInspect} disabled={busy}>
+              <Search className="h-4 w-4" />
+              Scan archive
+            </Button>
+          ) : (
+            <Button onClick={() => onAppend(Array.from(selected))} disabled={busy || totalSelected === 0}>
+              <Upload className="h-4 w-4" />
+              Append {totalSelected} item{totalSelected === 1 ? "" : "s"}
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function groupItems<T extends InventoryItem>(items: T[]) {
+  const map = new Map<ToolName, Map<Category, T[]>>();
+  for (const item of items) {
+    let toolMap = map.get(item.tool);
+    if (!toolMap) {
+      toolMap = new Map();
+      map.set(item.tool, toolMap);
+    }
+    const list = toolMap.get(item.category) ?? [];
+    list.push(item);
+    toolMap.set(item.category, list);
+  }
+  return Array.from(map.keys()).sort().map((tool) => {
+    const toolMap = map.get(tool)!;
+    const cats = CATEGORY_ORDER.filter((cat) => toolMap.has(cat)).map((cat) => ({
+      category: cat,
+      items: (toolMap.get(cat) ?? []).slice().sort((a, b) => a.name.localeCompare(b.name))
+    }));
+    return { tool, categories: cats };
+  });
+}
+
+function selectedState(items: InventoryItem[], selected: Set<string>): "all" | "some" | "none" {
+  let on = 0;
+  for (const item of items) if (selected.has(item.id)) on += 1;
+  if (on === 0) return "none";
+  if (on === items.length) return "all";
+  return "some";
 }
 
 function TriCheckbox({ state, onChange }: { state: "all" | "some" | "none"; onChange: (checked: boolean) => void }) {
