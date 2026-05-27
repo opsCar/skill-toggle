@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BookOpen, Boxes, Check, Code2, FileJson, FolderCog, RefreshCw, Search, ShieldCheck, SlidersHorizontal } from "lucide-react";
+import { BarChart3, BookOpen, Boxes, Check, Code2, Download, FileJson, FolderCog, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
@@ -30,6 +30,19 @@ interface ItemDetail extends InventoryItem {
   detailType: "markdown" | "json" | "text" | "none";
 }
 
+interface UsageStats {
+  total: number;
+  claude: number;
+  codex: number;
+  skill: number;
+  mcp: number;
+  hook: number;
+  tool: number;
+  rule: number;
+  lastUsed?: string;
+  evidence: string[];
+}
+
 const categories: Array<{ key: Category | "all"; label: string; icon: React.ElementType }> = [
   { key: "all", label: "All", icon: Boxes },
   { key: "skills", label: "Skills", icon: BookOpen },
@@ -46,6 +59,11 @@ function App() {
   const [query, setQuery] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
+  const [status, setStatus] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [usageById, setUsageById] = React.useState<Record<string, UsageStats>>({});
+  const [usageLoading, setUsageLoading] = React.useState(false);
+  const importInputRef = React.useRef<HTMLInputElement>(null);
 
   const loadItems = React.useCallback(async () => {
     setLoading(true);
@@ -55,6 +73,7 @@ function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Inventory failed");
       setItems(data.items);
+      void loadUsage();
       if (!selected && data.items.length > 0) void loadDetail(data.items[0].id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load inventory");
@@ -68,6 +87,22 @@ function App() {
     const data = await response.json();
     if (!response.ok) throw new Error(data.error ?? "Detail failed");
     setSelected(data);
+  }
+
+  async function loadUsage() {
+    setUsageLoading(true);
+    try {
+      const response = await fetch("/api/usage");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Usage scan failed");
+      const next: Record<string, UsageStats> = {};
+      for (const row of data.items ?? []) next[row.id] = row.usage;
+      setUsageById(next);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Usage scan failed");
+    } finally {
+      setUsageLoading(false);
+    }
   }
 
   async function toggleItem(item: InventoryItem, enabled: boolean) {
@@ -88,6 +123,71 @@ function App() {
   React.useEffect(() => {
     void loadItems();
   }, []);
+
+  async function exportArchive() {
+    setBusy(true);
+    setError("");
+    setStatus("Building archive — this can take a minute on a large env.");
+    try {
+      const response = await fetch("/api/export");
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({ error: "Export failed" }));
+        throw new Error(data.error ?? "Export failed");
+      }
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="?([^";]+)"?/);
+      const filename = match?.[1] ?? "skill-toggle-export.tar.gz";
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      const sources = response.headers.get("X-Skill-Toggle-Sources") ?? "";
+      setStatus(`Exported ${filename} (${formatBytes(blob.size)})${sources ? ` · sources: ${sources}` : ""}.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Export failed");
+      setStatus("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function importArchive(file: File) {
+    const confirmed = window.confirm(
+      `Import ${file.name} (${formatBytes(file.size)})?\n\nThis will REPLACE ~/.claude and ~/.codex with the archive's contents. ` +
+        "Your current setup will be saved to ~/.skill-toggle-backups/ as a tar.gz before anything is overwritten."
+    );
+    if (!confirmed) return;
+    setBusy(true);
+    setError("");
+    setStatus(`Importing ${file.name} — backing up current env first...`);
+    try {
+      const response = await fetch("/api/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/gzip" },
+        body: file
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Import failed");
+      setStatus(`Imported ${data.restoredSources?.join(", ") ?? "archive"}. Pre-import backup at ${data.preImportBackup}.`);
+      await loadItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Import failed");
+      setStatus("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function onImportPicked(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (file) void importArchive(file);
+  }
 
   const filtered = items.filter((item) => {
     const matchesCategory = category === "all" || item.category === category;
@@ -110,6 +210,8 @@ function App() {
 
   const enabledCount = items.reduce((acc, item) => acc + Number(item.enabled), 0);
   const invalidSkillCount = itemsForTool.filter((item) => item.category === "skills" && !item.valid).length;
+  const usageTotal = Object.values(usageById).reduce((acc, usage) => acc + usage.total, 0);
+  const selectedUsage = selected ? usageById[selected.id] : undefined;
 
   return (
     <main className="min-h-screen">
@@ -118,14 +220,27 @@ function App() {
           <div>
             <h1 className="text-2xl font-semibold tracking-normal">Skill Toggle</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {items.length} items · {enabledCount} enabled · {toolTotals.claude ?? 0} Claude Code · {toolTotals.codex ?? 0} Codex
+              {items.length} items · {enabledCount} enabled · {toolTotals.claude ?? 0} Claude Code · {toolTotals.codex ?? 0} Codex · {usageTotal} observed uses
             </p>
           </div>
-          <Button variant="outline" onClick={() => void loadItems()} disabled={loading}>
-            <RefreshCw className="h-4 w-4" />
-            Refresh
-          </Button>
+          <div className="flex items-center gap-2">
+            <input ref={importInputRef} type="file" accept=".tar.gz,.tgz,application/gzip,application/x-gzip" className="hidden" onChange={onImportPicked} />
+            <Button variant="outline" onClick={() => void exportArchive()} disabled={busy || loading}>
+              <Download className="h-4 w-4" />
+              Export
+            </Button>
+            <Button variant="outline" onClick={() => importInputRef.current?.click()} disabled={busy || loading}>
+              <Upload className="h-4 w-4" />
+              Import
+            </Button>
+            <Button variant="outline" onClick={() => void loadItems()} disabled={loading || busy}>
+              <RefreshCw className="h-4 w-4" />
+              Refresh
+            </Button>
+          </div>
         </div>
+        {status ? <div className="mx-auto max-w-[1500px] px-6 pb-3 text-xs text-muted-foreground">{status}</div> : null}
+        {usageLoading ? <div className="mx-auto max-w-[1500px] px-6 pb-3 text-xs text-muted-foreground">Scanning user-level Claude/Codex history...</div> : null}
       </header>
 
       <div className="mx-auto grid max-w-[1500px] grid-cols-[280px_minmax(360px,520px)_1fr] gap-0 px-6 py-6">
@@ -209,6 +324,11 @@ function App() {
                     <div className="mt-2 truncate text-xs text-muted-foreground">
                       {item.category === "skills" && !item.valid ? item.invalidReason ?? "Skill is invalid" : item.description}
                     </div>
+                    <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <BarChart3 className="h-3.5 w-3.5" />
+                      <span>{usageById[item.id]?.total ?? 0} uses</span>
+                      {usageById[item.id]?.lastUsed ? <span>· last {formatDate(usageById[item.id]?.lastUsed ?? "")}</span> : null}
+                    </div>
                   </button>
                 ))
               )}
@@ -248,7 +368,24 @@ function App() {
                 <Info label="Kind" value={selected.kind} />
                 <Info label="Source" value={selected.source} />
               </div>
-              <ScrollArea className="h-[calc(100vh-285px)] rounded-md border bg-card">
+              <div className="mb-3 grid grid-cols-5 gap-2 text-xs">
+                <Info label="Uses" value={String(selectedUsage?.total ?? 0)} />
+                <Info label="Claude" value={String(selectedUsage?.claude ?? 0)} />
+                <Info label="Codex" value={String(selectedUsage?.codex ?? 0)} />
+                <Info label="Signal" value={usageSignal(selectedUsage)} />
+                <Info label="Last used" value={selectedUsage?.lastUsed ? formatDate(selectedUsage.lastUsed) : "none"} />
+              </div>
+              {selectedUsage?.evidence?.length ? (
+                <div className="mb-3 rounded-md border bg-card px-3 py-2 text-xs text-muted-foreground">
+                  <div className="mb-1 font-medium text-foreground">Usage evidence</div>
+                  {selectedUsage.evidence.map((entry) => (
+                    <div key={entry} className="truncate">
+                      {entry}
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+              <ScrollArea className="h-[calc(100vh-380px)] rounded-md border bg-card">
                 <pre className="whitespace-pre-wrap break-words p-4 text-sm leading-6">{selected.detail}</pre>
               </ScrollArea>
             </div>
@@ -261,6 +398,36 @@ function App() {
       </div>
     </main>
   );
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  let value = bytes;
+  let unit = 0;
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024;
+    unit += 1;
+  }
+  return `${value < 10 && unit > 0 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
+}
+
+function formatDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function usageSignal(usage?: UsageStats): string {
+  if (!usage || usage.total === 0) return "none";
+  const rows: Array<[string, number]> = [
+    ["skill", usage.skill],
+    ["mcp", usage.mcp],
+    ["hook", usage.hook],
+    ["tool", usage.tool],
+    ["rule", usage.rule]
+  ];
+  return rows.sort((a, b) => b[1] - a[1])[0][0];
 }
 
 function Info({ label, value }: { label: string; value: string }) {
