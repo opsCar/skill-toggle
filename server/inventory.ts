@@ -2,7 +2,7 @@ import { constants, promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-export type ItemCategory = "skills" | "mcp" | "hooks" | "rules";
+export type ItemCategory = "skills" | "mcp" | "hooks" | "rules" | "agents" | "plugins";
 export type ItemSource = "claude" | "codex";
 
 export type InventoryItem = {
@@ -72,7 +72,7 @@ export function decodeId(id: string): { source: ItemSource; category: ItemCatego
   if ((parsed.source !== "claude" && parsed.source !== "codex") || typeof parsed.activePath !== "string") {
     throw new Error("Invalid item id");
   }
-  if (!["skills", "mcp", "hooks", "rules"].includes(String(parsed.category))) {
+  if (!["skills", "mcp", "hooks", "rules", "agents", "plugins"].includes(String(parsed.category))) {
     throw new Error("Invalid item category");
   }
   return parsed as { source: ItemSource; category: ItemCategory; activePath: string };
@@ -164,6 +164,8 @@ async function discoverCandidates(): Promise<Candidate[]> {
     candidates.push(...(await discoverConfigFiles(root, "mcp", mcpFiles(root))));
     candidates.push(...(await discoverConfigFiles(root, "hooks", hookFiles(root))));
     candidates.push(...(await discoverConfigFiles(root, "rules", ruleFiles(root))));
+    candidates.push(...(await discoverConfigFiles(root, "agents", agentFiles(root))));
+    candidates.push(...(await discoverConfigFiles(root, "plugins", pluginFiles(root))));
     candidates.push(...(await discoverBackups(root)));
   }
   return candidates;
@@ -226,8 +228,20 @@ function ruleFiles(root: RootInfo) {
   return [...common, "instructions.md", "config.toml"];
 }
 
+function agentFiles(root: RootInfo) {
+  return ["agents", ".agents", "subagents"];
+}
+
+function pluginFiles(root: RootInfo) {
+  const common = ["plugins"];
+  if (root.source === "codex") return [...common, ".codex/plugins"];
+  return common;
+}
+
 function inferCategory(relative: string): ItemCategory {
   if (relative.startsWith("skills/")) return "skills";
+  if (relative.startsWith("agents/") || relative.includes("/agents/") || relative.includes("subagent")) return "agents";
+  if (relative.startsWith("plugins/") || relative.includes("/plugins/")) return "plugins";
   if (relative.includes("hook")) return "hooks";
   if (relative.includes("mcp")) return "mcp";
   return "rules";

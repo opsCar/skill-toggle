@@ -37,6 +37,31 @@ test("lists skills and exposes markdown detail", async () => {
   expect(detail?.context.characters).toBe(item?.context.characters);
 });
 
+test("lists agents and plugins as toggleable path items", async () => {
+  const agentDir = path.join(tmp, ".codex", "agents", "reviewer");
+  const pluginDir = path.join(tmp, ".codex", "plugins", "browser");
+  await fs.mkdir(agentDir, { recursive: true });
+  await fs.writeFile(path.join(agentDir, "README.md"), "# Reviewer Agent\n");
+  await fs.mkdir(pluginDir, { recursive: true });
+  await fs.writeFile(path.join(pluginDir, "README.md"), "# Browser Plugin\n");
+
+  const { listInventory, getDetail, toggleItem } = await import("../server/discovery");
+  const items = await listInventory();
+  const agent = items.find((row) => row.tool === "codex" && row.category === "agents" && row.name === "reviewer");
+  const plugin = items.find((row) => row.tool === "codex" && row.category === "plugins" && row.name === "browser");
+
+  expect(agent?.enabled).toBe(true);
+  expect(plugin?.enabled).toBe(true);
+  expect((await getDetail(agent!.id))?.detail).toContain("Reviewer Agent");
+  expect((await getDetail(plugin!.id))?.detail).toContain("Browser Plugin");
+
+  await toggleItem(agent!.id, false);
+  await expect(fs.access(agentDir)).rejects.toThrow();
+  const disabled = (await listInventory()).find((row) => row.id === agent!.id);
+  expect(disabled?.enabled).toBe(false);
+  expect(disabled?.category).toBe("agents");
+});
+
 test("disables and restores a path item through the tool backup root", async () => {
   const rulePath = path.join(tmp, ".codex", "rules", "typescript.md");
   await fs.mkdir(path.dirname(rulePath), { recursive: true });

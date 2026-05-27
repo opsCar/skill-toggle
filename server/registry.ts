@@ -17,6 +17,8 @@ export function defaultRoots(): RegistryRoots {
 export async function listItems(roots = defaultRoots()): Promise<RegistryItem[]> {
   const items = [
     ...(await scanSkills(roots)),
+    ...(await scanDirectoryItems(roots, "agent", "agents", "Agent definition")),
+    ...(await scanDirectoryItems(roots, "plugin", "plugins", "Plugin bundle")),
     ...(await scanRules(roots)),
     ...(await scanClaudeSettings(roots)),
     ...(await scanCodexConfig(roots)),
@@ -70,6 +72,32 @@ export async function toggleItem(id: string, enabled: boolean, roots = defaultRo
     throw Object.assign(new Error("Item moved, but refreshed registry entry was not found."), { statusCode: 500 });
   }
   return refreshed;
+}
+
+async function scanDirectoryItems(roots: RegistryRoots, category: Category, dirname: string, description: string): Promise<RegistryItem[]> {
+  const items: RegistryItem[] = [];
+  for (const provider of ["claude", "codex"] as const) {
+    for (const scope of ["project", "home"] as const) {
+      const root = path.join(scopeRoot(provider, scope, roots), dirname);
+      for (const entry of await safeReadDir(root)) {
+        if (!entry.isDirectory() && !entry.isFile()) continue;
+        const originalPath = path.join(root, entry.name);
+        items.push(
+          makeFileItem({
+            provider,
+            category,
+            scope,
+            name: entry.name,
+            originalPath,
+            roots,
+            description,
+            detailPath: await firstDetailPath(originalPath)
+          })
+        );
+      }
+    }
+  }
+  return items;
 }
 
 async function scanSkills(roots: RegistryRoots): Promise<RegistryItem[]> {
@@ -212,6 +240,31 @@ async function scanDisabled(roots: RegistryRoots): Promise<RegistryItem[]> {
           detailPreview: await preview(detailPath)
         });
       }
+
+      for (const category of ["agent", "plugin"] as const) {
+        const dirname = category === "agent" ? "agents" : "plugins";
+        const backupCategoryRoot = path.join(backupRoot, scope, dirname);
+        for (const entry of await safeReadDir(backupCategoryRoot)) {
+          if (!entry.isDirectory() && !entry.isFile()) continue;
+          const backupPath = path.join(backupCategoryRoot, entry.name);
+          const originalPath = path.join(scopeRoot(provider, scope, roots), dirname, entry.name);
+          items.push({
+            id: makeId(provider, category, scope, entry.name, originalPath, "disabled"),
+            provider,
+            category,
+            scope,
+            name: entry.name,
+            status: "disabled",
+            path: backupPath,
+            originalPath,
+            backupPath,
+            canToggle: true,
+            description: `Disabled ${category} backup`,
+            detailPath: await firstDetailPath(backupPath),
+            detailPreview: await preview(backupPath)
+          });
+        }
+      }
     }
 
     for (const file of await walkAll(backupRoot)) {
@@ -219,6 +272,8 @@ async function scanDisabled(roots: RegistryRoots): Promise<RegistryItem[]> {
       if (!stat.isFile()) continue;
       const relative = path.relative(backupRoot, file);
       if (relative.includes(`${path.sep}skills${path.sep}`)) continue;
+      if (relative.includes(`${path.sep}agents${path.sep}`)) continue;
+      if (relative.includes(`${path.sep}plugins${path.sep}`)) continue;
       const segments = relative.split(path.sep);
       const scope = segments[0] === "project" ? "project" : "home";
       const originalPath = path.join(scopeRoot(provider, scope, roots), ...segments.slice(1));
@@ -335,17 +390,34 @@ async function ensureInsideAllowedRoots(source: string, destination: string, roo
 
 function inferCategoryFromPath(filePath: string): Category {
   if (filePath.includes(`${path.sep}skills${path.sep}`)) return "skill";
+  if (filePath.includes(`${path.sep}agents${path.sep}`)) return "agent";
+  if (filePath.includes(`${path.sep}plugins${path.sep}`)) return "plugin";
   if (filePath.endsWith("settings.json") || filePath.endsWith("config.toml")) return "rule";
   return "rule";
 }
 
 function inferNameFromPath(filePath: string, category: Category): string {
-  if (category === "skill") {
+  if (category === "skill" || category === "agent" || category === "plugin") {
     const parts = filePath.split(path.sep);
-    const index = parts.lastIndexOf("skills");
+    const index = parts.lastIndexOf(category === "skill" ? "skills" : `${category}s`);
     return index >= 0 ? parts[index + 1] : path.basename(path.dirname(filePath));
   }
   return path.basename(filePath);
+}
+
+async function firstDetailPath(target: string): Promise<string | undefined> {
+  try {
+    const stat = await fs.stat(target);
+    if (stat.isFile()) return target;
+  } catch {
+    return undefined;
+  }
+
+  for (const name of ["README.md", "readme.md", "SKILL.md", "AGENT.md", "PLUGIN.md", "package.json"]) {
+    const candidate = path.join(target, name);
+    if (await exists(candidate)) return candidate;
+  }
+  return undefined;
 }
 
 function extractDescription(text: string): string | undefined {
