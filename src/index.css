@@ -1,35 +1,153 @@
+@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300..900&family=Geist+Mono:wght@300..700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222 47% 11%;
+    /* Surface — warm off-white, layered card on top */
+    --background: 48 12% 97%;
+    --foreground: 240 6% 8%;
     --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --primary: 173 80% 28%;
+    --card-foreground: 240 6% 8%;
+
+    /* Accent — deep emerald: signals "on" without screaming */
+    --primary: 158 65% 28%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 38 58% 92%;
-    --secondary-foreground: 31 47% 20%;
-    --muted: 210 24% 96%;
-    --muted-foreground: 215 16% 42%;
-    --accent: 210 24% 96%;
-    --accent-foreground: 222 47% 11%;
-    --destructive: 0 72% 51%;
+
+    --secondary: 240 5% 96%;
+    --secondary-foreground: 240 6% 14%;
+
+    --muted: 240 5% 95%;
+    --muted-foreground: 240 5% 42%;
+
+    --accent: 240 5% 96%;
+    --accent-foreground: 240 6% 14%;
+
+    --destructive: 0 72% 48%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 20% 86%;
-    --input: 214 20% 86%;
-    --ring: 173 80% 28%;
-    --radius: 0.5rem;
+
+    --border: 240 6% 88%;
+    --input: 240 6% 88%;
+    --ring: 158 65% 28%;
+    --radius: 0.625rem;
   }
 
   * {
     @apply border-border;
   }
 
+  html {
+    font-family: "Geist", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1, "cv11" 1;
+    background-image:
+      radial-gradient(1200px 600px at 100% -10%, hsl(158 50% 92% / 0.4), transparent 60%),
+      radial-gradient(900px 500px at 0% 110%, hsl(48 80% 92% / 0.3), transparent 60%);
+    background-attachment: fixed;
+  }
+
+  .font-mono,
+  code,
+  kbd,
+  pre,
+  samp {
+    font-family: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-feature-settings: "ss01" 1, "zero" 1, "cv11" 1;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(240 6% 82%);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(240 6% 62%);
+    background-clip: padding-box;
+  }
+}
+
+@layer utilities {
+  /* Fixed grain overlay — pseudo on body so it never repaints with scroll */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.022;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.55 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  }
+
+  /* Live status pulse */
+  .status-pulse {
+    position: relative;
+  }
+  .status-pulse::before {
+    content: "";
+    position: absolute;
+    inset: -4px;
+    border-radius: 9999px;
+    background: hsl(var(--primary));
+    opacity: 0.35;
+    animation: status-ring 2.4s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+  @keyframes status-ring {
+    0% {
+      transform: scale(0.6);
+      opacity: 0.5;
+    }
+    80%,
+    100% {
+      transform: scale(1.6);
+      opacity: 0;
+    }
+  }
+
+  /* Subtle row mount stagger driven by index var */
+  .row-mount {
+    animation: row-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+    animation-delay: calc(var(--index, 0) * 14ms);
+  }
+  @keyframes row-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Tactile press */
+  .press {
+    transition: transform 120ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .press:active {
+    transform: translateY(1px) scale(0.99);
+  }
+
+  /* Inner-shadow card edge — premium materiality */
+  .card-edge {
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.6),
+      0 1px 2px 0 hsl(240 10% 6% / 0.04),
+      0 4px 12px -4px hsl(240 10% 6% / 0.05);
   }
 }

@@ -5,6 +5,10 @@ export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["Geist", "system-ui", "-apple-system", "sans-serif"],
+        mono: ["Geist Mono", "ui-monospace", "SFMono-Regular", "monospace"]
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -37,9 +41,21 @@ export default {
         }
       },
       borderRadius: {
-        lg: "0.5rem",
-        md: "0.375rem",
-        sm: "0.25rem"
+        xl: "1rem",
+        lg: "0.625rem",
+        md: "0.5rem",
+        sm: "0.375rem"
+      },
+      letterSpacing: {
+        tightish: "-0.012em"
+      },
+      keyframes: {
+        shimmer: {
+          "100%": { transform: "translateX(100%)" }
+        }
+      },
+      animation: {
+        shimmer: "shimmer 1.8s linear infinite"
       }
     }
   },

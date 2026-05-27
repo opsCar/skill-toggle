@@ -1,6 +1,27 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { BarChart3, BookOpen, Boxes, Check, ChevronDown, ChevronRight, Code2, Download, FileJson, FolderCog, Plug, RefreshCw, Search, ShieldCheck, SlidersHorizontal, Upload, UsersRound, X } from "lucide-react";
+import {
+  Activity,
+  BookOpen,
+  Boxes,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Circle,
+  Code2,
+  Download,
+  FileJson,
+  FolderCog,
+  Plug,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  SlidersHorizontal,
+  Sparkles,
+  Upload,
+  UsersRound,
+  X
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
@@ -67,6 +88,79 @@ interface ContextStats {
   charsPerToken: number;
 }
 
+interface ContextProbeContributor {
+  id: string;
+  tool: ToolName;
+  category: Category;
+  name: string;
+  estimatedTokens: number;
+  characters: number;
+  source: string;
+  path?: string;
+}
+
+interface ContextProbeBreakdown {
+  category: Category;
+  items: number;
+  estimatedTokens: number;
+  characters: number;
+  bytes: number;
+  lines: number;
+}
+
+interface ContextProbeTool {
+  tool: ToolName;
+  enabledItems: number;
+  estimatedContextTokens: number;
+  estimatedTotalTokens: number;
+  promptTokens: number;
+  characters: number;
+  bytes: number;
+  lines: number;
+  breakdown: ContextProbeBreakdown[];
+  topContributors: ContextProbeContributor[];
+}
+
+interface ContextProbe {
+  generatedAt: string;
+  prompt: string;
+  metric: "approx_chars_per_token";
+  charsPerToken: number;
+  caveats: string[];
+  tools: ContextProbeTool[];
+}
+
+interface StartupProbeComponent {
+  kind: string;
+  label: string;
+  count?: number;
+  estimatedTokens?: number;
+  characters?: number;
+}
+
+interface StartupProbeTool {
+  tool: ToolName;
+  sessionPath?: string;
+  timestamp?: string;
+  cwd?: string;
+  version?: string;
+  prompt?: string;
+  inputTokens?: number;
+  cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
+  totalInputTokens?: number;
+  modelContextWindow?: number;
+  components: StartupProbeComponent[];
+  warning?: string;
+}
+
+interface StartupProbe {
+  generatedAt: string;
+  metric: "session_history_usage";
+  note: string;
+  tools: StartupProbeTool[];
+}
+
 const categories: Array<{ key: Category | "all"; label: string; icon: React.ElementType }> = [
   { key: "all", label: "All", icon: Boxes },
   { key: "skills", label: "Skills", icon: BookOpen },
@@ -89,6 +183,8 @@ function App() {
   const [busy, setBusy] = React.useState(false);
   const [usageById, setUsageById] = React.useState<Record<string, UsageStats>>({});
   const [usageLoading, setUsageLoading] = React.useState(false);
+  const [startupProbe, setStartupProbe] = React.useState<StartupProbe | null>(null);
+  const [contextProbeLoading, setContextProbeLoading] = React.useState(false);
   const [exportOpen, setExportOpen] = React.useState(false);
   const [exportProgress, setExportProgress] = React.useState<number | null>(null);
   const [importProgress, setImportProgress] = React.useState<number | null>(null);
@@ -105,6 +201,7 @@ function App() {
       if (!response.ok) throw new Error(data.error ?? "Inventory failed");
       setItems(data.items);
       void loadUsage();
+      void loadStartupProbe();
       if (!selected && data.items.length > 0) void loadDetail(data.items[0].id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load inventory");
@@ -133,6 +230,20 @@ function App() {
       setError(err instanceof Error ? err.message : "Usage scan failed");
     } finally {
       setUsageLoading(false);
+    }
+  }
+
+  async function loadStartupProbe() {
+    setContextProbeLoading(true);
+    try {
+      const response = await fetch("/api/startup-probe");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Startup probe failed");
+      setStartupProbe(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Startup probe failed");
+    } finally {
+      setContextProbeLoading(false);
     }
   }
 
@@ -336,214 +447,371 @@ function App() {
   const importProgressText = formatProgressPercent(importProgress);
 
   return (
-    <main className="min-h-screen">
-      <header className="border-b bg-card">
-        <div className="mx-auto flex max-w-[1500px] items-center justify-between px-6 py-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-normal">Skill Toggle</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {items.length} items · {enabledCount} enabled · {toolTotals.claude ?? 0} Claude Code · {toolTotals.codex ?? 0} Codex · {usageTotal} observed uses
-              · {formatNumber(contextTotal)} est. context tokens
-            </p>
+    <main className="min-h-[100dvh]">
+      <header className="sticky top-0 z-30 border-b border-border/70 bg-background/85 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-6 px-6 py-3.5">
+          <div className="flex items-center gap-3">
+            <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-foreground text-background card-edge">
+              <Sparkles className="h-[18px] w-[18px]" strokeWidth={1.6} />
+            </div>
+            <div className="leading-tight">
+              <div className="flex items-center gap-2">
+                <h1 className="text-[15px] font-semibold tracking-tightish text-foreground">Skill Toggle</h1>
+                <span className="rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">v1</span>
+              </div>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">Inventory across Claude Code &amp; Codex</p>
+            </div>
           </div>
+
+          <div className="hidden flex-1 items-center justify-center md:flex">
+            <div className="flex items-center gap-0 rounded-full border border-border bg-card/70 py-1 pl-1 pr-1 card-edge">
+              <StatPill label="Items" value={formatNumber(items.length)} />
+              <StatDivider />
+              <StatPill label="On" value={formatNumber(enabledCount)} accent />
+              <StatDivider />
+              <StatPill label="Claude" value={formatNumber(toolTotals.claude ?? 0)} />
+              <StatDivider />
+              <StatPill label="Codex" value={formatNumber(toolTotals.codex ?? 0)} />
+              <StatDivider />
+              <StatPill label="Uses" value={formatNumber(usageTotal)} />
+              <StatDivider />
+              <StatPill label="Tokens" value={formatNumber(contextTotal)} />
+            </div>
+          </div>
+
           <div className="flex items-center gap-2">
             <input ref={importInputRef} type="file" accept=".tar.gz,.tgz,application/gzip,application/x-gzip" className="hidden" onChange={onImportPicked} />
             <Button
               variant="outline"
+              size="sm"
               onClick={() => setExportOpen(true)}
               disabled={busy || loading || items.length === 0}
-              className={`relative gap-2 overflow-hidden ${exportProgress != null ? "disabled:opacity-100" : ""}`}
+              className={`relative h-9 overflow-hidden px-3 ${exportProgress != null ? "disabled:opacity-100" : ""}`}
             >
               {exportProgress != null ? (
                 <span
                   aria-hidden
-                  className={`pointer-events-none absolute inset-y-0 left-0 bg-blue-500/30 transition-[width] duration-150 ease-out ${
+                  className={`pointer-events-none absolute inset-y-0 left-0 bg-primary/15 transition-[width] duration-150 ease-out ${
                     exportProgress < 0 ? "w-full animate-pulse" : ""
                   }`}
                   style={exportProgress >= 0 ? { width: `${Math.round(exportProgress * 100)}%` } : undefined}
                 />
               ) : null}
-              <Download className="relative h-4 w-4" />
-              <span className="relative">{exportProgressText ?? "Export"}</span>
+              <Download className="relative h-3.5 w-3.5" strokeWidth={1.75} />
+              <span className="relative font-mono text-[12px]">{exportProgressText ?? "Export"}</span>
             </Button>
             <Button
               variant="outline"
+              size="sm"
               onClick={() => importInputRef.current?.click()}
               disabled={busy || loading}
-              className={importProgress != null ? "disabled:opacity-100" : ""}
+              className={`h-9 px-3 ${importProgress != null ? "disabled:opacity-100" : ""}`}
             >
-              <Upload className="h-4 w-4" />
-              {importProgressText ?? "Import"}
+              <Upload className="h-3.5 w-3.5" strokeWidth={1.75} />
+              <span className="font-mono text-[12px]">{importProgressText ?? "Import"}</span>
             </Button>
-            <Button variant="outline" onClick={() => void loadItems()} disabled={loading || busy}>
-              <RefreshCw className="h-4 w-4" />
-              Refresh
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => void loadItems()}
+              disabled={loading || busy || contextProbeLoading}
+              title="Refresh inventory"
+              className="h-9 w-9 text-muted-foreground hover:text-foreground"
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} strokeWidth={1.75} />
             </Button>
           </div>
         </div>
-        {status ? <div className="mx-auto max-w-[1500px] px-6 pb-3 text-xs text-muted-foreground">{status}</div> : null}
-        {usageLoading ? <div className="mx-auto max-w-[1500px] px-6 pb-3 text-xs text-muted-foreground">Scanning user-level Claude/Codex history...</div> : null}
+        {status || usageLoading || contextProbeLoading ? (
+          <div className="mx-auto flex max-w-[1500px] items-center gap-2 px-6 pb-2.5 text-[11px] text-muted-foreground">
+            {usageLoading ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Activity className="h-3 w-3 animate-pulse text-primary" strokeWidth={2} />
+                Scanning Claude/Codex history…
+              </span>
+            ) : null}
+            {contextProbeLoading ? (
+              <span className="inline-flex items-center gap-1.5">
+                <Activity className="h-3 w-3 animate-pulse text-primary" strokeWidth={2} />
+                Probing baseline context…
+              </span>
+            ) : null}
+            {status ? <span className="truncate">{status}</span> : null}
+          </div>
+        ) : null}
       </header>
 
-      <div className="mx-auto grid max-w-[1500px] grid-cols-[280px_minmax(360px,520px)_1fr] gap-0 px-6 py-6">
-        <aside className="border-r pr-4">
-          <div className="mb-5 flex items-center gap-2 text-sm font-medium">
-            <SlidersHorizontal className="h-4 w-4" />
-            Filters
+      <div className="mx-auto grid max-w-[1500px] grid-cols-[244px_minmax(340px,500px)_1fr] gap-6 px-6 py-6">
+        <aside>
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              <SlidersHorizontal className="h-3 w-3" strokeWidth={2} />
+              Filters
+            </div>
+            {invalidSkillCount > 0 ? (
+              <span className="rounded-sm bg-destructive/10 px-1.5 py-0.5 font-mono text-[10px] text-destructive">{invalidSkillCount} invalid</span>
+            ) : null}
           </div>
-          <div className="space-y-2">
-            {categories.map(({ key, label, icon: Icon }) => (
-              <button
-                key={key}
-                className={`flex h-10 w-full items-center justify-between rounded-md px-3 text-sm transition-colors ${
-                  category === key ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-                }`}
-                onClick={() => setCategory(key)}
-              >
-                <span className="flex items-center gap-2">
-                  <Icon className="h-4 w-4" />
-                  {label}
-                </span>
-                <span>{key === "all" ? itemsForTool.length : categoryCounts[key] ?? 0}</span>
-              </button>
-            ))}
-          </div>
-          <div className="mt-6 grid grid-cols-3 gap-2">
+
+          <div className="mb-5 flex rounded-md border border-border bg-card p-0.5 card-edge">
             {(["all", "claude", "codex"] as const).map((key) => (
               <button
                 key={key}
-                className={`h-9 rounded-md border text-sm capitalize ${tool === key ? "border-primary bg-primary text-primary-foreground" : "bg-card"}`}
                 onClick={() => setTool(key)}
+                className={`relative flex-1 rounded-[6px] px-2 py-1.5 text-[12px] font-medium capitalize transition-all duration-150 press ${
+                  tool === key
+                    ? "bg-foreground text-background shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
               >
-                {key}
+                {key === "all" ? "All" : key === "claude" ? "Claude" : "Codex"}
               </button>
             ))}
           </div>
+
+          <nav className="space-y-0.5">
+            {categories.map(({ key, label, icon: Icon }) => {
+              const active = category === key;
+              const count = key === "all" ? itemsForTool.length : categoryCounts[key] ?? 0;
+              return (
+                <button
+                  key={key}
+                  className={`group relative flex h-9 w-full items-center gap-2.5 rounded-md pl-3 pr-2.5 text-[13px] transition-colors press ${
+                    active ? "bg-card text-foreground card-edge" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                  }`}
+                  onClick={() => setCategory(key)}
+                >
+                  <span
+                    aria-hidden
+                    className={`absolute left-0 top-1.5 bottom-1.5 w-[2px] rounded-full transition-all ${
+                      active ? "bg-primary" : "bg-transparent group-hover:bg-border"
+                    }`}
+                  />
+                  <Icon className={`h-3.5 w-3.5 ${active ? "text-foreground" : ""}`} strokeWidth={1.75} />
+                  <span className="flex-1 text-left">{label}</span>
+                  <span className={`font-mono text-[11px] tabular-nums ${active ? "text-foreground" : "text-muted-foreground/80"}`}>{count}</span>
+                </button>
+              );
+            })}
+          </nav>
+          <StartupProbePanel probe={startupProbe} activeTool={tool} loading={contextProbeLoading} onRefresh={() => void loadStartupProbe()} />
         </aside>
 
-        <section className="border-r px-4">
-          <label className="mb-3 flex h-10 items-center gap-2 rounded-md border bg-card px-3">
-            <Search className="h-4 w-4 text-muted-foreground" />
+        <section className="min-w-0">
+          <label className="mb-3 flex h-10 items-center gap-2 rounded-md border border-border bg-card px-3 transition-colors focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-ring/20">
+            <Search className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.75} />
             <input
-              className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+              className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/60"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search name, path, or source"
+              placeholder="Search name, path, or source…"
             />
+            {query ? (
+              <button
+                onClick={() => setQuery("")}
+                className="rounded p-0.5 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
+                aria-label="Clear search"
+              >
+                <X className="h-3 w-3" strokeWidth={2} />
+              </button>
+            ) : null}
+            <span className="font-mono text-[10px] tabular-nums text-muted-foreground/70">{filtered.length}</span>
           </label>
-          {error ? <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}</div> : null}
-          <ScrollArea className="h-[calc(100vh-170px)]">
-            <div className="space-y-2 pr-3">
+          {error ? <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">{error}</div> : null}
+          <ScrollArea className="h-[calc(100dvh-186px)]">
+            <div className="overflow-hidden rounded-md border border-border bg-card card-edge">
               {loading ? (
-                <div className="p-4 text-sm text-muted-foreground">Loading inventory...</div>
+                <div className="space-y-3 p-4">
+                  {Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="space-y-2">
+                      <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
+                      <div className="h-2 w-3/4 animate-pulse rounded bg-muted" />
+                    </div>
+                  ))}
+                </div>
+              ) : filtered.length === 0 ? (
+                <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <Search className="h-4 w-4" strokeWidth={1.75} />
+                  </div>
+                  <div className="text-[13px] font-medium">No matching items</div>
+                  <div className="mt-1 text-[12px] text-muted-foreground">Try a different search or clear your filters.</div>
+                </div>
               ) : (
-                filtered.map((item) => (
-                  <button
-                    key={item.id}
-                    className={`w-full rounded-md border bg-card p-3 text-left transition-colors hover:border-primary/60 ${
-                      selected?.id === item.id ? "border-primary shadow-sm" : ""
-                    }`}
-                    onClick={() => void loadDetail(item.id)}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="truncate text-sm font-medium">{item.name}</span>
-                          {item.category === "skills" && !item.valid ? (
-                            <span className="shrink-0 rounded-sm border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-destructive">
-                              invalid
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="mt-1 flex flex-wrap gap-1 text-xs text-muted-foreground">
-                          <span className="rounded-sm bg-muted px-1.5 py-0.5">{item.tool}</span>
-                          <span className="rounded-sm bg-muted px-1.5 py-0.5">{item.category}</span>
-                          <span className="rounded-sm bg-muted px-1.5 py-0.5">{item.kind}</span>
-                        </div>
-                      </div>
-                      <span className={`mt-0.5 h-2.5 w-2.5 rounded-full ${item.enabled ? "bg-primary" : "bg-muted-foreground"}`} />
-                    </div>
-                    <div className="mt-2 truncate text-xs text-muted-foreground">
-                      {item.category === "skills" && !item.valid ? item.invalidReason ?? "Skill is invalid" : item.description}
-                    </div>
-                    <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <BarChart3 className="h-3.5 w-3.5" />
-                      <span>{usageById[item.id]?.total ?? 0} uses</span>
-                      {usageById[item.id]?.lastUsed ? <span>· last {formatDate(usageById[item.id]?.lastUsed ?? "")}</span> : null}
-                      <span>· {formatNumber(item.context.estimatedTokens)} est. tokens</span>
-                    </div>
-                  </button>
-                ))
+                <ul className="divide-y divide-border/70">
+                  {filtered.map((item, index) => {
+                    const isActive = selected?.id === item.id;
+                    const usage = usageById[item.id];
+                    const invalid = item.category === "skills" && !item.valid;
+                    return (
+                      <li
+                        key={item.id}
+                        className="row-mount"
+                        style={{ ["--index" as any]: index < 24 ? index : 0 }}
+                      >
+                        <button
+                          className={`group relative flex w-full items-start px-3.5 py-3 text-left transition-colors press ${
+                            isActive ? "bg-muted/60" : "hover:bg-muted/40"
+                          }`}
+                          onClick={() => void loadDetail(item.id)}
+                        >
+                          <span
+                            aria-hidden
+                            className={`absolute left-0 top-0 bottom-0 w-[3px] transition-colors ${
+                              isActive ? "bg-primary" : item.enabled ? "bg-primary/40" : "bg-transparent"
+                            }`}
+                          />
+                          <span
+                            className={`mt-1 flex h-3 w-3 shrink-0 items-center justify-center ${item.enabled ? "text-primary" : "text-muted-foreground/40"}`}
+                            title={item.enabled ? "Enabled" : "Disabled"}
+                          >
+                            {item.enabled ? (
+                              <span className="block h-2 w-2 rounded-full bg-current shadow-[0_0_0_3px_currentColor]/[.12]" />
+                            ) : (
+                              <Circle className="h-2.5 w-2.5" strokeWidth={1.5} />
+                            )}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className={`truncate text-[13px] font-medium tracking-tightish ${isActive ? "text-foreground" : "text-foreground/90"}`}>
+                                {item.name}
+                              </span>
+                              {invalid ? (
+                                <span className="shrink-0 rounded-sm bg-destructive/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-destructive">
+                                  invalid
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="mt-1 truncate text-[11.5px] text-muted-foreground">
+                              {invalid ? item.invalidReason ?? "Skill is invalid" : item.description}
+                            </div>
+                            <div className="mt-1.5 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/80">
+                              <span>{item.tool === "claude" ? "Claude" : "Codex"}</span>
+                              <span className="text-muted-foreground/40">·</span>
+                              <span>{item.category}</span>
+                              <span className="text-muted-foreground/40">·</span>
+                              <span>{formatNumber(usage?.total ?? 0)} uses</span>
+                              <span className="text-muted-foreground/40">·</span>
+                              <span>{formatNumber(item.context.estimatedTokens)} tok</span>
+                              {usage?.lastUsed ? (
+                                <>
+                                  <span className="text-muted-foreground/40">·</span>
+                                  <span>{formatDate(usage.lastUsed)}</span>
+                                </>
+                              ) : null}
+                            </div>
+                          </div>
+                          <ChevronRight
+                            className={`mt-1 h-3.5 w-3.5 shrink-0 transition-all ${
+                              isActive ? "translate-x-0 text-foreground" : "-translate-x-1 text-muted-foreground/0 group-hover:translate-x-0 group-hover:text-muted-foreground"
+                            }`}
+                            strokeWidth={1.75}
+                          />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </div>
           </ScrollArea>
         </section>
 
-        <section className="pl-4">
+        <section className="min-w-0">
           {selected ? (
-            <div className="h-[calc(100vh-122px)]">
-              <div className="mb-4 flex items-start justify-between gap-4 border-b pb-4">
+            <div className="flex h-[calc(100dvh-138px)] flex-col overflow-hidden rounded-md border border-border bg-card card-edge">
+              <header className="flex items-start justify-between gap-4 border-b border-border/70 px-5 py-4">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <h2 className="truncate text-xl font-semibold">{selected.name}</h2>
-                    {selected.enabled ? <Check className="h-4 w-4 text-primary" /> : null}
-                    {selected.category === "skills" && !selected.valid ? (
-                      <span className="rounded-sm border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-destructive">
-                        invalid
+                    <h2 className="truncate text-[18px] font-semibold tracking-tightish">{selected.name}</h2>
+                    {selected.enabled ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-primary">
+                        <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                        on
                       </span>
+                    ) : (
+                      <span className="rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">off</span>
+                    )}
+                    {selected.category === "skills" && !selected.valid ? (
+                      <span className="rounded-full bg-destructive/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-destructive">invalid</span>
                     ) : null}
                   </div>
-                  <div className="mt-1 truncate text-sm text-muted-foreground">{selected.path ?? selected.backupPath}</div>
+                  <div className="mt-1 truncate font-mono text-[11.5px] text-muted-foreground">{selected.path ?? selected.backupPath}</div>
                   {selected.category === "skills" && !selected.valid ? (
-                    <div className="mt-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    <div className="mt-2 rounded-md border-l-2 border-destructive bg-destructive/5 px-3 py-1.5 text-[12px] text-destructive">
                       {selected.invalidReason ?? "Skill is invalid"}
                     </div>
                   ) : null}
                 </div>
-                <div className="flex items-center gap-3 rounded-md border bg-card px-3 py-2">
-                  <span className="text-sm">{selected.enabled ? "Enabled" : "Disabled"}</span>
+                <div className="flex items-center gap-2.5 rounded-md border border-border bg-background/60 px-2.5 py-1.5">
+                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                    {selected.enabled ? "On" : "Off"}
+                  </span>
                   <Switch checked={selected.enabled} onCheckedChange={(checked) => void toggleItem(selected, checked)} />
                 </div>
+              </header>
+
+              <div className="flex-shrink-0 border-b border-border/60 px-5 py-3.5">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 md:grid-cols-4">
+                  <Field label="Tool" value={TOOL_LABELS[selected.tool]} />
+                  <Field label="Category" value={CATEGORY_LABELS[selected.category]} />
+                  <Field label="Kind" value={selected.kind === "path" ? "Path" : "Config entry"} />
+                  <Field label="Source" value={selected.source} mono truncate />
+                </div>
               </div>
-              <div className="mb-3 grid grid-cols-4 gap-2 text-xs">
-                <Info label="Tool" value={selected.tool} />
-                <Info label="Category" value={selected.category} />
-                <Info label="Kind" value={selected.kind} />
-                <Info label="Source" value={selected.source} />
+
+              <div className="flex-shrink-0 border-b border-border/60 px-5 py-3.5">
+                <div className="mb-2 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Usage</div>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 md:grid-cols-5">
+                  <Field label="Total" value={String(selectedUsage?.total ?? 0)} mono />
+                  <Field label="Claude" value={String(selectedUsage?.claude ?? 0)} mono />
+                  <Field label="Codex" value={String(selectedUsage?.codex ?? 0)} mono />
+                  <Field label="Signal" value={usageSignal(selectedUsage)} />
+                  <Field label="Last used" value={selectedUsage?.lastUsed ? formatDate(selectedUsage.lastUsed) : "—"} mono />
+                </div>
               </div>
-              <div className="mb-3 grid grid-cols-5 gap-2 text-xs">
-                <Info label="Uses" value={String(selectedUsage?.total ?? 0)} />
-                <Info label="Claude" value={String(selectedUsage?.claude ?? 0)} />
-                <Info label="Codex" value={String(selectedUsage?.codex ?? 0)} />
-                <Info label="Signal" value={usageSignal(selectedUsage)} />
-                <Info label="Last used" value={selectedUsage?.lastUsed ? formatDate(selectedUsage.lastUsed) : "none"} />
+
+              <div className="flex-shrink-0 border-b border-border/60 px-5 py-3.5">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Context</span>
+                  <span className="font-mono text-[10px] text-muted-foreground/70">~{selected.context.charsPerToken} chars/token</span>
+                </div>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-2 md:grid-cols-4">
+                  <Field label="Est. tokens" value={formatNumber(selected.context.estimatedTokens)} mono accent />
+                  <Field label="Characters" value={formatNumber(selected.context.characters)} mono />
+                  <Field label="Bytes" value={formatBytes(selected.context.bytes)} mono />
+                  <Field label="Lines" value={formatNumber(selected.context.lines)} mono />
+                </div>
               </div>
-              <div className="mb-3 grid grid-cols-4 gap-2 text-xs">
-                <Info label="Est. tokens" value={formatNumber(selected.context.estimatedTokens)} />
-                <Info label="Characters" value={formatNumber(selected.context.characters)} />
-                <Info label="Bytes" value={formatBytes(selected.context.bytes)} />
-                <Info label="Lines" value={formatNumber(selected.context.lines)} />
-              </div>
-              <div className="mb-3 rounded-md border bg-card px-3 py-2 text-xs text-muted-foreground">
-                Context estimate uses {selected.context.charsPerToken} characters per token against the readable detail/config payload for this item.
-              </div>
+
               {selectedUsage?.evidence?.length ? (
-                <div className="mb-3 rounded-md border bg-card px-3 py-2 text-xs text-muted-foreground">
-                  <div className="mb-1 font-medium text-foreground">Usage evidence</div>
-                  {selectedUsage.evidence.map((entry) => (
-                    <div key={entry} className="truncate">
-                      {entry}
-                    </div>
-                  ))}
+                <div className="flex-shrink-0 border-b border-border/60 px-5 py-3.5">
+                  <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Evidence</div>
+                  <ul className="space-y-0.5 font-mono text-[11px] text-muted-foreground">
+                    {selectedUsage.evidence.map((entry) => (
+                      <li key={entry} className="truncate">
+                        {entry}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               ) : null}
-              <ScrollArea className="h-[calc(100vh-380px)] rounded-md border bg-card">
-                <pre className="whitespace-pre-wrap break-words p-4 text-sm leading-6">{selected.detail}</pre>
+
+              <ScrollArea className="min-h-0 flex-1 bg-card">
+                <pre className="whitespace-pre-wrap break-words p-5 font-mono text-[12.5px] leading-[1.65] text-foreground/90">
+                  {selected.detail}
+                </pre>
               </ScrollArea>
             </div>
           ) : (
-            <div className="flex h-[calc(100vh-122px)] items-center justify-center rounded-md border bg-card text-sm text-muted-foreground">
-              Select an item
+            <div className="flex h-[calc(100dvh-138px)] flex-col items-center justify-center rounded-md border border-dashed border-border bg-card/40">
+              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <Boxes className="h-5 w-5" strokeWidth={1.5} />
+              </div>
+              <div className="text-[14px] font-medium">Select an item</div>
+              <div className="mt-1 max-w-[28ch] text-center text-[12px] text-muted-foreground">
+                Pick a skill, agent, MCP entry, hook, rule, or plugin from the list to inspect &amp; toggle it.
+              </div>
             </div>
           )}
         </section>
@@ -596,6 +864,102 @@ interface ExportSelection {
   filename: string;
   itemIds: string[];
   saveHandle?: FileSystemFileHandle | null;
+}
+
+function StartupProbePanel({
+  probe,
+  activeTool,
+  loading,
+  onRefresh
+}: {
+  probe: StartupProbe | null;
+  activeTool: ToolName | "all";
+  loading: boolean;
+  onRefresh: () => void;
+}) {
+  const visibleTools = React.useMemo(() => {
+    const tools = probe?.tools ?? [];
+    return activeTool === "all" ? tools : tools.filter((row) => row.tool === activeTool);
+  }, [activeTool, probe]);
+
+  return (
+    <div className="mt-3 rounded-md border border-border bg-card p-3 card-edge">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Startup probe</div>
+          <div className="mt-0.5 truncate text-[12px] text-muted-foreground">from session history</div>
+        </div>
+        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onRefresh} disabled={loading} title="Refresh startup probe">
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} strokeWidth={1.75} />
+        </Button>
+      </div>
+
+      {!probe ? (
+        <div className="mt-3 text-[12px] text-muted-foreground">{loading ? "Reading sessions…" : "No probe data yet."}</div>
+      ) : (
+        <div className="mt-3 space-y-3">
+          {visibleTools.map((row) => (
+            <div key={row.tool} className="rounded-md border border-border/80 bg-background/60 p-2.5">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="text-[13px] font-medium">{TOOL_LABELS[row.tool]}</div>
+                  <div className="mt-0.5 max-w-[120px] truncate text-[10px] text-muted-foreground" title={row.prompt}>
+                    first: {shortPrompt(row.prompt)}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <div className="font-mono text-[16px] font-semibold tabular-nums">{formatNumber(row.totalInputTokens ?? row.inputTokens ?? 0)}</div>
+                  <div className="text-[10px] text-muted-foreground">input tokens</div>
+                </div>
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-1.5">
+                <MiniMetric label="direct" value={formatNumber(row.inputTokens ?? 0)} />
+                <MiniMetric label="cached" value={formatNumber((row.cachedInputTokens ?? 0) + (row.cacheCreationInputTokens ?? 0))} />
+              </div>
+              {row.warning ? <div className="mt-2 text-[11px] text-muted-foreground">{row.warning}</div> : null}
+              {row.components.length ? (
+                <div className="mt-3 border-t border-border/70 pt-2">
+                  <div className="mb-1 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Loaded at startup</div>
+                  <div className="space-y-1">
+                    {row.components.slice(0, 6).map((item, index) => (
+                      <div key={`${item.kind}-${index}`} className="flex items-center gap-2 text-[11px]">
+                        <span className="min-w-0 flex-1 truncate" title={item.label}>{item.label}</span>
+                        {item.count != null ? <span className="rounded-sm bg-muted px-1 py-0.5 text-[10px] text-muted-foreground">{item.count}</span> : null}
+                        {item.estimatedTokens != null ? <span className="font-mono tabular-nums text-muted-foreground">~{formatNumber(item.estimatedTokens)}</span> : null}
+                      </div>
+                    ))}
+                    {row.components.length > 6 ? (
+                      <div className="text-[10px] text-muted-foreground">+{row.components.length - 6} more startup entries</div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+              <div className="mt-2 truncate text-[10px] text-muted-foreground" title={row.sessionPath}>
+                {row.version ? `v${row.version}` : "session"} {row.modelContextWindow ? ` · window ${formatNumber(row.modelContextWindow)}` : ""}
+              </div>
+            </div>
+          ))}
+          <div className="text-[10px] leading-4 text-muted-foreground">
+            This reads the first recorded request in the latest session for this workspace. For a true blank baseline, start a fresh agent session, send only hello, then refresh.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function shortPrompt(value?: string) {
+  if (!value) return "unknown";
+  const trimmed = value.replace(/\s+/g, " ").trim();
+  return trimmed.length > 24 ? `${trimmed.slice(0, 24)}…` : trimmed;
+}
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded border border-border/70 bg-muted/30 px-2 py-1">
+      <div className="font-mono text-[11px] tabular-nums">{value}</div>
+      <div className="text-[10px] text-muted-foreground">{label}</div>
+    </div>
+  );
 }
 
 function ExportDialog({
@@ -696,25 +1060,30 @@ function ExportDialog({
   const totalSelected = selected.size;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
-      <div className="flex w-full max-w-3xl flex-col overflow-hidden rounded-lg border bg-card shadow-xl">
-        <div className="flex items-start justify-between gap-4 border-b px-5 py-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+      <div className="flex w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl card-edge">
+        <div className="flex items-start justify-between gap-4 border-b border-border/70 px-5 py-4">
           <div>
-            <h2 className="text-lg font-semibold">Export setup</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Pick a filename, optional save location, and the scope to include. {totalSelected} of {items.length} items selected.
+            <div className="flex items-center gap-2">
+              <Download className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} />
+              <h2 className="text-[15px] font-semibold tracking-tightish">Export setup</h2>
+            </div>
+            <p className="mt-1 text-[12px] text-muted-foreground">
+              Pick a filename, optional save location, and the scope to include.{" "}
+              <span className="font-mono tabular-nums text-foreground">{totalSelected}</span> of{" "}
+              <span className="font-mono tabular-nums">{items.length}</span> items selected.
             </p>
           </div>
-          <button onClick={onCancel} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Close">
+          <button onClick={onCancel} className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Close">
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="grid gap-3 border-b px-5 py-4 sm:grid-cols-[1fr_auto]">
-          <label className="flex flex-col gap-1 text-xs">
-            <span className="text-muted-foreground">Filename</span>
+        <div className="grid gap-3 border-b border-border/70 px-5 py-4 sm:grid-cols-[1fr_auto]">
+          <label className="flex flex-col gap-1.5">
+            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Filename</span>
             <input
-              className="h-9 rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
+              className="h-9 rounded-md border border-border bg-background px-3 font-mono text-[12.5px] outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-ring/20"
               value={filename}
               onChange={(event) => {
                 setFilename(event.target.value);
@@ -722,38 +1091,38 @@ function ExportDialog({
               }}
             />
           </label>
-          <div className="flex flex-col gap-1 text-xs">
-            <span className="text-muted-foreground">Save location</span>
+          <div className="flex flex-col gap-1.5">
+            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Save location</span>
             {supportsFilePicker ? (
               <Button type="button" variant="outline" onClick={() => void chooseLocation()}>
-                <FolderCog className="h-4 w-4" />
+                <FolderCog className="h-3.5 w-3.5" strokeWidth={1.75} />
                 {saveHandle ? "Change…" : "Choose…"}
               </Button>
             ) : (
-              <div className="flex h-9 items-center rounded-md border bg-muted/40 px-3 text-xs text-muted-foreground">
+              <div className="flex h-9 items-center rounded-md border border-border bg-muted/40 px-3 text-[12px] text-muted-foreground">
                 Browser Downloads folder
               </div>
             )}
-            {saveHandle ? <span className="truncate text-[11px] text-muted-foreground">→ {saveHandle.name}</span> : null}
+            {saveHandle ? <span className="truncate font-mono text-[11px] text-muted-foreground">→ {saveHandle.name}</span> : null}
           </div>
         </div>
 
-        <div className="flex items-center justify-between border-b px-5 py-2 text-xs">
-          <span className="text-muted-foreground">Scope (everything pre-selected by default)</span>
+        <div className="flex items-center justify-between border-b border-border/70 px-5 py-2.5">
+          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Scope · pre-selected</span>
           <div className="flex items-center gap-2">
             <button
-              className="rounded-md border px-2 py-1 hover:bg-muted"
+              className="rounded-md border border-border bg-card px-2 py-1 text-[11px] transition-colors press hover:bg-muted/60"
               onClick={() => setSelected(new Set(items.map((item) => item.id)))}
             >
               Select all
             </button>
-            <button className="rounded-md border px-2 py-1 hover:bg-muted" onClick={() => setSelected(new Set())}>
+            <button className="rounded-md border border-border bg-card px-2 py-1 text-[11px] transition-colors press hover:bg-muted/60" onClick={() => setSelected(new Set())}>
               Clear
             </button>
           </div>
         </div>
 
-        <ScrollArea className="h-[420px]">
+        <ScrollArea className="h-[420px] bg-background/40">
           <div className="px-5 py-3">
             {groups.map(({ tool, categories: catGroups }) => {
               const toolItems = catGroups.flatMap((group) => group.items);
@@ -761,24 +1130,26 @@ function ExportDialog({
               const toolStatus = toolState(toolItems);
               const isExpanded = expanded.has(toolKey);
               return (
-                <div key={tool} className="mb-3 rounded-md border">
-                  <div className="flex items-center gap-2 border-b px-3 py-2">
+                <div key={tool} className="mb-3 overflow-hidden rounded-md border border-border bg-card">
+                  <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
                     <button
                       onClick={() => toggleExpanded(toolKey)}
-                      className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted"
+                      className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                       aria-label={isExpanded ? "Collapse" : "Expand"}
                     >
-                      {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                      {isExpanded ? <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} /> : <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} />}
                     </button>
                     <TriCheckbox
                       state={toolStatus}
                       onChange={(checked) => setMany(toolItems.map((item) => item.id), checked)}
                     />
-                    <div className="flex-1 text-sm font-medium">{TOOL_LABELS[tool]}</div>
-                    <span className="text-xs text-muted-foreground">{toolItems.filter((item) => selected.has(item.id)).length}/{toolItems.length}</span>
+                    <div className="flex-1 text-[13px] font-medium">{TOOL_LABELS[tool]}</div>
+                    <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                      {toolItems.filter((item) => selected.has(item.id)).length}/{toolItems.length}
+                    </span>
                   </div>
                   {isExpanded ? (
-                    <div className="space-y-1 px-3 py-2">
+                    <div className="space-y-1.5 bg-muted/20 px-2.5 py-2">
                       {catGroups.map(({ category, items: catItems }) => {
                         const catKey = `cat:${tool}:${category}`;
                         const catExpanded = expanded.has(catKey);
@@ -786,32 +1157,40 @@ function ExportDialog({
                         for (const item of catItems) if (selected.has(item.id)) onCount += 1;
                         const catStatus: "all" | "some" | "none" = onCount === 0 ? "none" : onCount === catItems.length ? "all" : "some";
                         return (
-                          <div key={category} className="rounded-md border bg-muted/20">
+                          <div key={category} className="overflow-hidden rounded-md border border-border/70 bg-card">
                             <div className="flex items-center gap-2 px-3 py-1.5">
                               <button
                                 onClick={() => toggleExpanded(catKey)}
-                                className="flex h-5 w-5 items-center justify-center rounded hover:bg-muted"
+                                className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                 aria-label={catExpanded ? "Collapse" : "Expand"}
                               >
-                                {catExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                {catExpanded ? <ChevronDown className="h-3 w-3" strokeWidth={1.75} /> : <ChevronRight className="h-3 w-3" strokeWidth={1.75} />}
                               </button>
                               <TriCheckbox state={catStatus} onChange={(checked) => setMany(catItems.map((item) => item.id), checked)} />
-                              <div className="flex-1 text-sm">{CATEGORY_LABELS[category]}</div>
-                              <span className="text-[11px] text-muted-foreground">{onCount}/{catItems.length}</span>
+                              <div className="flex-1 text-[12.5px]">{CATEGORY_LABELS[category]}</div>
+                              <span className="font-mono text-[10px] tabular-nums text-muted-foreground">{onCount}/{catItems.length}</span>
                             </div>
                             {catExpanded ? (
-                              <div className="space-y-0.5 border-t bg-background px-3 py-2">
+                              <div className="divide-y divide-border/60 border-t border-border/60 bg-background/40">
                                 {catItems.map((item) => {
                                   const isOn = selected.has(item.id);
                                   return (
-                                    <label key={item.id} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/60">
+                                    <label key={item.id} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-[12.5px] transition-colors hover:bg-muted/60">
                                       <TriCheckbox
                                         state={isOn ? "all" : "none"}
                                         onChange={(checked) => setMany([item.id], checked)}
                                       />
                                       <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                                      <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">{item.enabled ? "on" : "off"}</span>
-                                      <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{item.kind === "path" ? "path" : "config"}</span>
+                                      <span
+                                        className={`rounded-sm px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
+                                          item.enabled ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                                        }`}
+                                      >
+                                        {item.enabled ? "on" : "off"}
+                                      </span>
+                                      <span className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                                        {item.kind === "path" ? "path" : "config"}
+                                      </span>
                                     </label>
                                   );
                                 })}
@@ -826,17 +1205,24 @@ function ExportDialog({
               );
             })}
             {groups.length === 0 ? (
-              <div className="rounded-md border bg-muted/30 p-6 text-center text-sm text-muted-foreground">No items detected in your environment.</div>
+              <div className="rounded-md border border-dashed border-border bg-card/40 p-8 text-center text-[12.5px] text-muted-foreground">
+                No items detected in your environment.
+              </div>
             ) : null}
           </div>
         </ScrollArea>
 
-        <div className="flex items-center justify-end gap-2 border-t bg-muted/30 px-5 py-3">
-          <Button variant="outline" onClick={onCancel}>Cancel</Button>
-          <Button onClick={handleExport} disabled={totalSelected === 0}>
-            <Download className="h-4 w-4" />
-            Export {totalSelected} item{totalSelected === 1 ? "" : "s"}
-          </Button>
+        <div className="flex items-center justify-between gap-2 border-t border-border/70 bg-muted/30 px-5 py-3">
+          <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground">
+            {totalSelected} of {items.length} ready
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={onCancel}>Cancel</Button>
+            <Button variant="primary" onClick={handleExport} disabled={totalSelected === 0}>
+              <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
+              Export {totalSelected} item{totalSelected === 1 ? "" : "s"}
+            </Button>
+          </div>
         </div>
       </div>
     </div>
@@ -894,69 +1280,88 @@ function ImportDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
-      <div className="flex w-full max-w-3xl flex-col overflow-hidden rounded-lg border bg-card shadow-xl">
-        <div className="flex items-start justify-between gap-4 border-b px-5 py-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
+      <div className="flex w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-border bg-card shadow-2xl card-edge">
+        <div className="flex items-start justify-between gap-4 border-b border-border/70 px-5 py-4">
           <div>
-            <h2 className="text-lg font-semibold">Import archive</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <Upload className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} />
+              <h2 className="text-[15px] font-semibold tracking-tightish">Import archive</h2>
+            </div>
+            <p className="mt-1 font-mono text-[11.5px] text-muted-foreground">
               {file.name} · {formatBytes(file.size)}
             </p>
           </div>
-          <button onClick={onCancel} className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Close">
+          <button onClick={onCancel} className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Close">
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="grid gap-3 border-b px-5 py-4 sm:grid-cols-2">
+        <div className="grid gap-3 border-b border-border/70 px-5 py-4 sm:grid-cols-2">
           <button
-            className={`rounded-md border p-3 text-left ${mode === "replace" ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
+            className={`relative overflow-hidden rounded-md border p-3 text-left transition-all press ${
+              mode === "replace" ? "border-foreground/30 bg-card card-edge" : "border-border hover:bg-muted/40"
+            }`}
             onClick={() => setMode("replace")}
           >
-            <div className="text-sm font-medium">Replace current</div>
-            <div className="mt-1 text-xs text-muted-foreground">
+            {mode === "replace" ? <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[2px] rounded-full bg-primary" /> : null}
+            <div className="text-[13px] font-medium">Replace current</div>
+            <div className="mt-1 text-[11.5px] text-muted-foreground">
               Completely replace local Claude/Codex env with this archive. A pre-import backup is created first.
             </div>
           </button>
           <button
-            className={`rounded-md border p-3 text-left ${mode === "append" ? "border-primary bg-primary/5" : "hover:bg-muted/50"}`}
+            className={`relative overflow-hidden rounded-md border p-3 text-left transition-all press ${
+              mode === "append" ? "border-foreground/30 bg-card card-edge" : "border-border hover:bg-muted/40"
+            }`}
             onClick={() => setMode("append")}
           >
-            <div className="text-sm font-medium">Append selected</div>
-            <div className="mt-1 text-xs text-muted-foreground">
+            {mode === "append" ? <span aria-hidden className="absolute left-0 top-2 bottom-2 w-[2px] rounded-full bg-primary" /> : null}
+            <div className="text-[13px] font-medium">Append selected</div>
+            <div className="mt-1 text-[11.5px] text-muted-foreground">
               Scan the archive and add only selected skills, agents, plugins, MCP entries, hooks, or rules to the current env.
             </div>
           </button>
         </div>
 
         {mode === "replace" ? (
-          <div className="px-5 py-5 text-sm text-muted-foreground">
-            This mode replaces the archive's top-level env folders, including matching disabled-item backups, after writing a backup tar under
-            <span className="font-mono"> ~/.skill-toggle-backups/</span>.
+          <div className="px-5 py-5 text-[12.5px] leading-relaxed text-muted-foreground">
+            This mode replaces the archive's top-level env folders, including matching disabled-item backups, after writing a backup tar under{" "}
+            <span className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">~/.skill-toggle-backups/</span>.
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between border-b px-5 py-2 text-xs">
-              <span className="text-muted-foreground">
-                {inspection ? `${totalSelected} of ${inspection.items.length} archive items selected` : "Scan the tar archive before selecting items."}
+            <div className="flex items-center justify-between border-b border-border/70 px-5 py-2.5">
+              <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground">
+                {inspection ? `${totalSelected} of ${inspection.items.length} selected` : "Scan archive to begin"}
               </span>
               {inspection ? (
                 <div className="flex items-center gap-2">
-                  <button className="rounded-md border px-2 py-1 hover:bg-muted" onClick={() => setSelected(new Set(inspection.items.map((item) => item.id)))}>
+                  <button
+                    className="rounded-md border border-border bg-card px-2 py-1 text-[11px] transition-colors press hover:bg-muted/60"
+                    onClick={() => setSelected(new Set(inspection.items.map((item) => item.id)))}
+                  >
                     Select all
                   </button>
-                  <button className="rounded-md border px-2 py-1 hover:bg-muted" onClick={() => setSelected(new Set())}>
+                  <button
+                    className="rounded-md border border-border bg-card px-2 py-1 text-[11px] transition-colors press hover:bg-muted/60"
+                    onClick={() => setSelected(new Set())}
+                  >
                     Clear
                   </button>
                 </div>
               ) : null}
             </div>
-            <ScrollArea className="h-[420px]">
+            <ScrollArea className="h-[420px] bg-background/40">
               <div className="px-5 py-3">
                 {!inspection ? (
-                  <div className="rounded-md border bg-muted/30 p-6 text-center text-sm text-muted-foreground">Archive contents have not been scanned yet.</div>
+                  <div className="rounded-md border border-dashed border-border bg-card/40 p-8 text-center text-[12.5px] text-muted-foreground">
+                    Archive contents have not been scanned yet.
+                  </div>
                 ) : groups.length === 0 ? (
-                  <div className="rounded-md border bg-muted/30 p-6 text-center text-sm text-muted-foreground">No importable items found in this archive.</div>
+                  <div className="rounded-md border border-dashed border-border bg-card/40 p-8 text-center text-[12.5px] text-muted-foreground">
+                    No importable items found in this archive.
+                  </div>
                 ) : (
                   groups.map(({ tool, categories: catGroups }) => {
                     const toolItems = catGroups.flatMap((group) => group.items);
@@ -964,49 +1369,55 @@ function ImportDialog({
                     const toolStatus = selectedState(toolItems, selected);
                     const isExpanded = expanded.has(toolKey);
                     return (
-                      <div key={tool} className="mb-3 rounded-md border">
-                        <div className="flex items-center gap-2 border-b px-3 py-2">
+                      <div key={tool} className="mb-3 overflow-hidden rounded-md border border-border bg-card">
+                        <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
                           <button
                             onClick={() => toggleExpanded(toolKey)}
-                            className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted"
+                            className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                             aria-label={isExpanded ? "Collapse" : "Expand"}
                           >
-                            {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                            {isExpanded ? <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} /> : <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} />}
                           </button>
                           <TriCheckbox state={toolStatus} onChange={(checked) => setMany(toolItems.map((item) => item.id), checked)} />
-                          <div className="flex-1 text-sm font-medium">{TOOL_LABELS[tool]}</div>
-                          <span className="text-xs text-muted-foreground">{toolItems.filter((item) => selected.has(item.id)).length}/{toolItems.length}</span>
+                          <div className="flex-1 text-[13px] font-medium">{TOOL_LABELS[tool]}</div>
+                          <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+                            {toolItems.filter((item) => selected.has(item.id)).length}/{toolItems.length}
+                          </span>
                         </div>
                         {isExpanded ? (
-                          <div className="space-y-1 px-3 py-2">
+                          <div className="space-y-1.5 bg-muted/20 px-2.5 py-2">
                             {catGroups.map(({ category, items: catItems }) => {
                               const catKey = `cat:${tool}:${category}`;
                               const catExpanded = expanded.has(catKey);
                               const catStatus = selectedState(catItems, selected);
                               return (
-                                <div key={category} className="rounded-md border bg-muted/20">
+                                <div key={category} className="overflow-hidden rounded-md border border-border/70 bg-card">
                                   <div className="flex items-center gap-2 px-3 py-1.5">
                                     <button
                                       onClick={() => toggleExpanded(catKey)}
-                                      className="flex h-5 w-5 items-center justify-center rounded hover:bg-muted"
+                                      className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                       aria-label={catExpanded ? "Collapse" : "Expand"}
                                     >
-                                      {catExpanded ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                      {catExpanded ? <ChevronDown className="h-3 w-3" strokeWidth={1.75} /> : <ChevronRight className="h-3 w-3" strokeWidth={1.75} />}
                                     </button>
                                     <TriCheckbox state={catStatus} onChange={(checked) => setMany(catItems.map((item) => item.id), checked)} />
-                                    <div className="flex-1 text-sm">{CATEGORY_LABELS[category]}</div>
-                                    <span className="text-[11px] text-muted-foreground">{catItems.filter((item) => selected.has(item.id)).length}/{catItems.length}</span>
+                                    <div className="flex-1 text-[12.5px]">{CATEGORY_LABELS[category]}</div>
+                                    <span className="font-mono text-[10px] tabular-nums text-muted-foreground">
+                                      {catItems.filter((item) => selected.has(item.id)).length}/{catItems.length}
+                                    </span>
                                   </div>
                                   {catExpanded ? (
-                                    <div className="space-y-0.5 border-t bg-background px-3 py-2">
+                                    <div className="divide-y divide-border/60 border-t border-border/60 bg-background/40">
                                       {catItems.map((item) => {
                                         const isOn = selected.has(item.id);
                                         return (
-                                          <label key={item.id} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-muted/60">
+                                          <label key={item.id} className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-[12.5px] transition-colors hover:bg-muted/60">
                                             <TriCheckbox state={isOn ? "all" : "none"} onChange={(checked) => setMany([item.id], checked)} />
                                             <span className="min-w-0 flex-1 truncate">{item.name}</span>
-                                            <span className="truncate text-xs text-muted-foreground">{item.archivePath}</span>
-                                            <span className="rounded-sm bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">{item.kind === "path" ? "path" : "config"}</span>
+                                            <span className="truncate font-mono text-[11px] text-muted-foreground">{item.archivePath}</span>
+                                            <span className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                                              {item.kind === "path" ? "path" : "config"}
+                                            </span>
                                           </label>
                                         );
                                       })}
@@ -1026,24 +1437,29 @@ function ImportDialog({
           </>
         )}
 
-        <div className="flex items-center justify-end gap-2 border-t bg-muted/30 px-5 py-3">
-          <Button variant="outline" onClick={onCancel}>Cancel</Button>
-          {mode === "replace" ? (
-            <Button onClick={onReplace} disabled={busy}>
-              <Upload className="h-4 w-4" />
-              {progressText ?? "Replace current"}
-            </Button>
-          ) : !inspection ? (
-            <Button onClick={onInspect} disabled={busy}>
-              <Search className="h-4 w-4" />
-              {progressText ?? "Scan archive"}
-            </Button>
-          ) : (
-            <Button onClick={() => onAppend(Array.from(selected))} disabled={busy || totalSelected === 0}>
-              <Upload className="h-4 w-4" />
-              {progressText ?? `Append ${totalSelected} item${totalSelected === 1 ? "" : "s"}`}
-            </Button>
-          )}
+        <div className="flex items-center justify-between gap-2 border-t border-border/70 bg-muted/30 px-5 py-3">
+          <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground">
+            {mode === "replace" ? "Mode · replace" : inspection ? `${totalSelected} ready to append` : "Awaiting scan"}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={onCancel}>Cancel</Button>
+            {mode === "replace" ? (
+              <Button variant="primary" onClick={onReplace} disabled={busy}>
+                <Upload className="h-3.5 w-3.5" strokeWidth={1.75} />
+                {progressText ?? "Replace current"}
+              </Button>
+            ) : !inspection ? (
+              <Button variant="primary" onClick={onInspect} disabled={busy}>
+                <Search className="h-3.5 w-3.5" strokeWidth={1.75} />
+                {progressText ?? "Scan archive"}
+              </Button>
+            ) : (
+              <Button variant="primary" onClick={() => onAppend(Array.from(selected))} disabled={busy || totalSelected === 0}>
+                <Upload className="h-3.5 w-3.5" strokeWidth={1.75} />
+                {progressText ?? `Append ${totalSelected} item${totalSelected === 1 ? "" : "s"}`}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -1089,7 +1505,7 @@ function TriCheckbox({ state, onChange }: { state: "all" | "some" | "none"; onCh
     <input
       ref={ref}
       type="checkbox"
-      className="h-4 w-4 cursor-pointer accent-primary"
+      className="h-[14px] w-[14px] cursor-pointer rounded accent-foreground transition-transform active:scale-90"
       checked={state === "all"}
       onChange={(event) => onChange(event.target.checked)}
       onClick={(event) => event.stopPropagation()}
@@ -1181,13 +1597,51 @@ function usageSignal(usage?: UsageStats): string {
   return rows.sort((a, b) => b[1] - a[1])[0][0];
 }
 
-function Info({ label, value }: { label: string; value: string }) {
+function Field({
+  label,
+  value,
+  mono,
+  accent,
+  truncate
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  accent?: boolean;
+  truncate?: boolean;
+}) {
   return (
-    <div className="min-w-0 rounded-md border bg-card p-2">
-      <div className="text-muted-foreground">{label}</div>
-      <div className="truncate font-medium">{value}</div>
+    <div className="min-w-0">
+      <div className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80">{label}</div>
+      <div
+        className={`mt-0.5 text-[13px] tabular-nums ${mono ? "font-mono" : ""} ${accent ? "text-primary font-medium" : "text-foreground"} ${
+          truncate ? "truncate" : ""
+        }`}
+        title={truncate ? value : undefined}
+      >
+        {value}
+      </div>
     </div>
   );
+}
+
+function StatPill({ label, value, accent }: { label: string; value: string | number; accent?: boolean }) {
+  return (
+    <div className="flex items-center gap-1.5 px-2.5 py-0.5">
+      <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span
+        className={`font-mono text-[12px] font-medium tabular-nums ${
+          accent ? "text-primary" : "text-foreground"
+        }`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function StatDivider() {
+  return <span aria-hidden className="h-3 w-px bg-border" />;
 }
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
