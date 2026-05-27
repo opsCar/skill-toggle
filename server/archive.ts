@@ -2,6 +2,9 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { stringify } from "smol-toml";
+import { getAt, listInventory, readConfig, setAt } from "./discovery";
+import type { ConfigEntryMeta, InventoryItem } from "./types";
 
 const home = os.homedir();
 
@@ -98,13 +101,92 @@ function excludeArgs() {
   return EXCLUDES.flatMap((pattern) => ["--exclude", pattern]);
 }
 
-export async function writeExportArchive(destPath: string): Promise<ExportSummary> {
+export async function writeExportArchive(destPath: string, itemIds?: string[]): Promise<ExportSummary> {
+  await fs.mkdir(path.dirname(destPath), { recursive: true });
+  if (itemIds !== undefined) {
+    return writeSelectiveExport(destPath, itemIds);
+  }
   const sources = await existingSources();
   if (sources.length === 0) throw new Error("Nothing to export: ~/.claude and ~/.codex are both missing");
-  await fs.mkdir(path.dirname(destPath), { recursive: true });
   await runTar(["-czf", destPath, ...excludeArgs(), "-C", home, ...sources]);
   const stat = await fs.stat(destPath);
   return { filename: path.basename(destPath), bytes: stat.size, sources };
+}
+
+async function writeSelectiveExport(destPath: string, itemIds: string[]): Promise<ExportSummary> {
+  if (itemIds.length === 0) throw new Error("Nothing to export: no items selected");
+  const selectedSet = new Set(itemIds);
+  const inventory = await listInventory();
+  const selected: InventoryItem[] = inventory.filter((item) => selectedSet.has(item.id));
+  if (selected.length === 0) throw new Error("Nothing to export: selected items not found in inventory");
+
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const stagingDir = path.join(os.tmpdir(), `skill-toggle-staging-${stamp}`);
+  await fs.mkdir(stagingDir, { recursive: true });
+  try {
+    type ConfigBucket = { format: "json" | "toml"; data: any; configPath: string };
+    const configBuckets = new Map<string, ConfigBucket>();
+
+    for (const item of selected) {
+      if (item.kind === "path") {
+        const sourcePath = item.enabled ? item.path : item.backupPath;
+        if (!sourcePath) continue;
+        if (!sourcePath.startsWith(home + path.sep) && sourcePath !== home) continue;
+        const relative = path.relative(home, sourcePath);
+        if (!relative || relative.startsWith("..")) continue;
+        const destEntry = path.join(stagingDir, relative);
+        await fs.mkdir(path.dirname(destEntry), { recursive: true });
+        await fs.cp(sourcePath, destEntry, { recursive: true });
+        continue;
+      }
+
+      // config-entry
+      let configPath: string;
+      let keyPath: string[];
+      let value: unknown;
+      if (item.enabled) {
+        if (!item.path) continue;
+        configPath = item.path;
+        keyPath = item.description.split(" in ")[0].split(".");
+        const format: "json" | "toml" = configPath.endsWith(".toml") ? "toml" : "json";
+        const live = await readConfig(configPath, format);
+        value = getAt(live, keyPath);
+      } else {
+        if (!item.backupPath) continue;
+        const metaText = await fs.readFile(item.backupPath, "utf8").catch(() => "");
+        if (!metaText) continue;
+        const meta = JSON.parse(metaText) as ConfigEntryMeta;
+        configPath = meta.configPath;
+        keyPath = meta.keyPath;
+        value = meta.value;
+      }
+      if (!configPath.startsWith(home + path.sep)) continue;
+      const format: "json" | "toml" = configPath.endsWith(".toml") ? "toml" : "json";
+      let bucket = configBuckets.get(configPath);
+      if (!bucket) {
+        bucket = { format, data: {}, configPath };
+        configBuckets.set(configPath, bucket);
+      }
+      setAt(bucket.data, keyPath, value);
+    }
+
+    for (const bucket of configBuckets.values()) {
+      const relative = path.relative(home, bucket.configPath);
+      if (!relative || relative.startsWith("..")) continue;
+      const destEntry = path.join(stagingDir, relative);
+      await fs.mkdir(path.dirname(destEntry), { recursive: true });
+      const text = bucket.format === "json" ? `${JSON.stringify(bucket.data, null, 2)}\n` : stringify(bucket.data as any);
+      await fs.writeFile(destEntry, text);
+    }
+
+    const topLevel = (await fs.readdir(stagingDir)).filter((entry) => ALLOWED_SOURCES.has(entry as typeof ARCHIVE_SOURCES[number]));
+    if (topLevel.length === 0) throw new Error("Nothing staged for export: selection produced no archivable files");
+    await runTar(["-czf", destPath, ...excludeArgs(), "-C", stagingDir, ...topLevel]);
+    const stat = await fs.stat(destPath);
+    return { filename: path.basename(destPath), bytes: stat.size, sources: topLevel };
+  } finally {
+    await fs.rm(stagingDir, { recursive: true, force: true }).catch(() => undefined);
+  }
 }
 
 export async function applyImportArchive(tarPath: string): Promise<ImportSummary> {

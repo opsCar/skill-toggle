@@ -29,9 +29,12 @@ test("lists skills and exposes markdown detail", async () => {
 
   expect(item?.category).toBe("skills");
   expect(item?.enabled).toBe(true);
+  expect(item?.context.estimatedTokens).toBeGreaterThan(0);
+  expect(item?.context.lines).toBeGreaterThanOrEqual(4);
 
   const detail = await getDetail(item!.id);
   expect(detail?.detail).toContain("Sample Skill");
+  expect(detail?.context.characters).toBe(item?.context.characters);
 });
 
 test("disables and restores a path item through the tool backup root", async () => {
@@ -61,6 +64,8 @@ test("lists and toggles MCP config entries", async () => {
   const { listInventory, toggleItem } = await import("../server/discovery");
   const item = (await listInventory()).find((row) => row.tool === "codex" && row.category === "mcp" && row.name === "demo");
   expect(item?.enabled).toBe(true);
+  expect(item?.context.characters).toBeGreaterThan(0);
+  expect(item?.context.estimatedTokens).toBe(Math.ceil(item!.context.characters / item!.context.charsPerToken));
 
   await toggleItem(item!.id, false);
   expect(await fs.readFile(configPath, "utf8")).not.toContain("demo");
