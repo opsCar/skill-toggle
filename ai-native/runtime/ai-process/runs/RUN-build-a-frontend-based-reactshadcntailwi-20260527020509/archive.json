@@ -1,0 +1,17 @@
+{
+  "run_id": "RUN-build-a-frontend-based-reactshadcntailwi-20260527020509",
+  "final_status": "completed_with_local_artifacts",
+  "artifact_index": [
+    "intent.md",
+    "clarification.md",
+    "context-bundle.json",
+    "security-analysis.md",
+    "spec.md",
+    "tasks.md",
+    "changes.json",
+    "doc-updates.json",
+    "local-validation.log",
+    "verification.md",
+    "delivery-summary.md"
+  ]
+}

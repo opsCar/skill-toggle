@@ -1,0 +1,5 @@
+{
+  "affected_flows": ["inventory-discovery", "toggle-backup-restore"],
+  "affected_modules": ["app-shell"],
+  "refresh_reason": "Initial implementation added the app, API, and tests described by the knowledge flows."
+}

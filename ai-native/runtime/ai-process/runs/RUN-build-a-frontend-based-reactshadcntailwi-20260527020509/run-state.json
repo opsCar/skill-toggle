@@ -1,0 +1,906 @@
+{
+  "actors": [
+    {
+      "first_seen_at": "2026-05-27T02:05:09+00:00",
+      "id": "petershi",
+      "type": "agent"
+    },
+    {
+      "first_seen_at": "2026-05-27T02:14:37+00:00",
+      "id": "compare-harness",
+      "type": "agent"
+    }
+  ],
+  "artifacts": {
+    "archive_record": {
+      "path": "/Users/petershi/SideProject/skill-toggle/ai-native/runtime/ai-process/runs/RUN-build-a-frontend-based-reactshadcntailwi-20260527020509/archive.json",
+      "updated_at": "2026-05-27T02:16:30+00:00"
+    },
+    "clarification_record": {
+      "path": "/Users/petershi/SideProject/skill-toggle/ai-native/runtime/ai-process/runs/RUN-build-a-frontend-based-reactshadcntailwi-20260527020509/clarification.md",
+      "updated_at": "2026-05-27T02:15:16+00:00"
+    },
+    "code_change_set": {
+      "path": "/Users/petershi/SideProject/skill-toggle/ai-native/runtime/ai-process/runs/RUN-build-a-frontend-based-reactshadcntailwi-20260527020509/changes.json",
+      "updated_at": "2026-05-27T02:15:45+00:00"
+    },
+    "context_bundle": {
+      "path": "/Users/petershi/SideProject/skill-toggle/ai-native/runtime/ai-process/runs/RUN-build-a-frontend-based-reactshadcntailwi-20260527020509/context-bundle.json",
+      "updated_at": "2026-05-27T02:15:16+00:00"
+    },
+    "dashboard_overview": {
+      "path": "ai-native/runtime/ai-process/runs/dashboard.html",
+      "updated_at": "2026-05-27T02:16:34+00:00"
+    },
+    "dashboard_run_detail": {
+      "path": "ai-native/runtime/ai-process/runs/RUN-build-a-frontend-based-reactshadcntailwi-20260527020509/dashboard.html",
+      "updated_at": "2026-05-27T02:16:34+00:00"
+    },
+    "delivery_summary": {
+      "path": "/Users/petershi/SideProject/skill-toggle/ai-native/runtime/ai-process/runs/RUN-build-a-frontend-based-reactshadcntailwi-20260527020509/delivery-summary.md",
+      "updated_at": "2026-05-27T02:16:30+00:00"
+    },
+    "doc_updates": {
+      "path": "/Users/petershi/SideProject/skill-toggle/ai-native/runtime/ai-process/runs/RUN-build-a-frontend-based-reactshadcntailwi-20260527020509/doc-updates.json",
+      "updated_at": "2026-05-27T02:15:45+00:00"
+    },
+    "evidence_ledger_entry": {
+      "path": "/Users/petershi/SideProject/skill-toggle/ai-native/docs/ai-index/evidence-ledger.jsonl",
+      "updated_at": "2026-05-27T02:16:29+00:00"
+    },
+    "index_update_request": {
+      "path": "/Users/petershi/SideProject/skill-toggle/ai-native/runtime/ai-process/runs/RUN-build-a-frontend-based-reactshadcntailwi-20260527020509/index-update-request.json",
+      "updated_at": "2026-05-27T02:16:32+00:00"
+    },
+    "intent_record": {
+      "path": "/Users/petershi/SideProject/skill-toggle/ai-native/runtime/ai-process/runs/RUN-build-a-frontend-based-reactshadcntailwi-20260527020509/intent.md",
+      "updated_at": "2026-05-27T02:14:13+00:00"
+    },
+    "learning_record": {
+      "path": "/Users/petershi/SideProject/skill-toggle/ai-native/runtime/ai-process/runs/RUN-build-a-frontend-based-reactshadcntailwi-20260527020509/learn.md",
+      "updated_at": "2026-05-27T02:16:32+00:00"
+    },
+    "local_validation_log": {
+      "path": "/Users/petershi/SideProject/skill-toggle/ai-native/runtime/ai-process/runs/RUN-build-a-frontend-based-reactshadcntailwi-20260527020509/local-validation.log",
+      "updated_at": "2026-05-27T02:15:45+00:00"
+    },
+    "process_event_log": {
+      "path": "ai-native/runtime/ai-process/runs/RUN-build-a-frontend-based-reactshadcntailwi-20260527020509/events.jsonl",
+      "updated_at": "2026-05-27T02:05:09+00:00"
+    },
+    "run_metrics_snapshot": {
+      "path": "ai-native/runtime/ai-process/runs/RUN-build-a-frontend-based-reactshadcntailwi-20260527020509/metrics.json",
+      "updated_at": "2026-05-27T02:05:09+00:00"
+    },
+    "security_analysis": {
+      "path": "/Users/petershi/SideProject/skill-toggle/ai-native/runtime/ai-process/runs/RUN-build-a-frontend-based-reactshadcntailwi-20260527020509/security-analysis.md",
+      "updated_at": "2026-05-27T02:15:19+00:00"
+    },
+    "spec_doc": {
+      "path": "/Users/petershi/SideProject/skill-toggle/ai-native/runtime/ai-process/runs/RUN-build-a-frontend-based-reactshadcntailwi-20260527020509/spec.md",
+      "updated_at": "2026-05-27T02:15:42+00:00"
+    },
+    "tasks_doc": {
+      "path": "/Users/petershi/SideProject/skill-toggle/ai-native/runtime/ai-process/runs/RUN-build-a-frontend-based-reactshadcntailwi-20260527020509/tasks.md",
+      "updated_at": "2026-05-27T02:15:42+00:00"
+    },
+    "verification_report": {
+      "path": "/Users/petershi/SideProject/skill-toggle/ai-native/runtime/ai-process/runs/RUN-build-a-frontend-based-reactshadcntailwi-20260527020509/verification.md",
+      "updated_at": "2026-05-27T02:16:29+00:00"
+    }
+  },
+  "complexity": "standard",
+  "created_at": "2026-05-27T02:05:09+00:00",
+  "current_stage": "learn",
+  "current_stage_status": "completed",
+  "effective_enabled_stages": [
+    "intake",
+    "clarify",
+    "security",
+    "spec",
+    "implement",
+    "verify",
+    "archive",
+    "learn"
+  ],
+  "enabled_stages": [
+    "intake",
+    "clarify",
+    "security",
+    "spec",
+    "implement",
+    "verify",
+    "archive",
+    "learn"
+  ],
+  "gates": {
+    "delivery_recorded": true,
+    "evidence_recorded": true,
+    "implementation_verified": true,
+    "learning_captured": true,
+    "request_classified": true,
+    "scope_confirmed": true,
+    "security_checked": true,
+    "spec_approved": true,
+    "trace_recorded": true,
+    "verification_passed": true
+  },
+  "history": [
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "run_started",
+      "request": "build a frontend based react+shadcn+tailwindcss app that will read all skills, mcp, hook, rules from claude code and codex. user should be able to check detailed list for each category and even click specific item if it has description/readme.md to see the detail. user should be able to click a toggle to enable/disable skills/mcp/hook/rules in the list, maybe by simply delete it from original place and back up it in ~/.claude_bak ~/.codex_bak and restore it when user enables",
+      "request_label": "build a frontend based react+shadcn+tailwindcss app that will read all skills, m",
+      "run_label": "build-a-frontend-based-reactshadcntailwi",
+      "stage": "intake",
+      "timestamp": "2026-05-27T02:05:09+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "artifact": "intent_record",
+      "declared": true,
+      "event": "artifact_attached",
+      "stage": "intake",
+      "timestamp": "2026-05-27T02:14:13+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "gates_checked",
+      "execute_checks": false,
+      "gates": {
+        "request_classified": true
+      },
+      "stage": "intake",
+      "timestamp": "2026-05-27T02:14:23+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:intake",
+      "commit_id": "",
+      "event": "approval_requested",
+      "interaction": "binary_choice",
+      "review_boundary": "before_intake_advance",
+      "stage": "intake",
+      "timestamp": "2026-05-27T02:14:23+00:00"
+    },
+    {
+      "actor_id": "compare-harness",
+      "actor_type": "agent",
+      "approval_ref": "decisions.log:D3",
+      "commit_id": "2f96505",
+      "event": "approval_granted",
+      "review_boundary": "before_review",
+      "stage": "intake",
+      "timestamp": "2026-05-27T02:14:37+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "gates_checked",
+      "execute_checks": false,
+      "gates": {
+        "request_classified": true
+      },
+      "stage": "intake",
+      "timestamp": "2026-05-27T02:14:38+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:intake",
+      "commit_id": "",
+      "event": "approval_requested",
+      "interaction": "binary_choice",
+      "review_boundary": "before_intake_advance",
+      "stage": "intake",
+      "timestamp": "2026-05-27T02:14:38+00:00"
+    },
+    {
+      "actor_id": "compare-harness",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:intake",
+      "commit_id": "",
+      "event": "approval_granted",
+      "review_boundary": "before_intake_advance",
+      "stage": "intake",
+      "timestamp": "2026-05-27T02:14:56+00:00"
+    },
+    {
+      "actor_id": "compare-harness",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:intake",
+      "boundary": "before_intake_advance",
+      "commit_id": "",
+      "event": "stage_approved",
+      "stage": "intake",
+      "timestamp": "2026-05-27T02:14:56+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "gates_checked",
+      "execute_checks": false,
+      "gates": {
+        "request_classified": true
+      },
+      "stage": "intake",
+      "timestamp": "2026-05-27T02:14:56+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "stage_advanced",
+      "from_stage": "intake",
+      "timestamp": "2026-05-27T02:14:57+00:00",
+      "to_stage": "clarify"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "artifact": "clarification_record",
+      "declared": true,
+      "event": "artifact_attached",
+      "stage": "clarify",
+      "timestamp": "2026-05-27T02:15:16+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "artifact": "context_bundle",
+      "declared": true,
+      "event": "artifact_attached",
+      "stage": "clarify",
+      "timestamp": "2026-05-27T02:15:16+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "gates_checked",
+      "execute_checks": false,
+      "gates": {
+        "scope_confirmed": true
+      },
+      "stage": "clarify",
+      "timestamp": "2026-05-27T02:15:17+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:clarify",
+      "commit_id": "",
+      "event": "approval_requested",
+      "interaction": "binary_choice",
+      "review_boundary": "before_clarify_advance",
+      "stage": "clarify",
+      "timestamp": "2026-05-27T02:15:17+00:00"
+    },
+    {
+      "actor_id": "compare-harness",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509larify",
+      "commit_id": "",
+      "event": "approval_granted",
+      "review_boundary": "before_clarify_advance",
+      "stage": "clarify",
+      "timestamp": "2026-05-27T02:15:18+00:00"
+    },
+    {
+      "actor_id": "compare-harness",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509larify",
+      "boundary": "before_clarify_advance",
+      "commit_id": "",
+      "event": "stage_approved",
+      "stage": "clarify",
+      "timestamp": "2026-05-27T02:15:18+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "gates_checked",
+      "execute_checks": false,
+      "gates": {
+        "scope_confirmed": true
+      },
+      "stage": "clarify",
+      "timestamp": "2026-05-27T02:15:18+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "stage_advanced",
+      "from_stage": "clarify",
+      "timestamp": "2026-05-27T02:15:19+00:00",
+      "to_stage": "security"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "artifact": "security_analysis",
+      "declared": true,
+      "event": "artifact_attached",
+      "stage": "security",
+      "timestamp": "2026-05-27T02:15:19+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "gates_checked",
+      "execute_checks": false,
+      "gates": {
+        "security_checked": true
+      },
+      "stage": "security",
+      "timestamp": "2026-05-27T02:15:20+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:security",
+      "commit_id": "",
+      "event": "approval_requested",
+      "interaction": "binary_choice",
+      "review_boundary": "before_security_advance",
+      "stage": "security",
+      "timestamp": "2026-05-27T02:15:20+00:00"
+    },
+    {
+      "actor_id": "compare-harness",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:security",
+      "commit_id": "",
+      "event": "approval_granted",
+      "review_boundary": "before_security_advance",
+      "stage": "security",
+      "timestamp": "2026-05-27T02:15:41+00:00"
+    },
+    {
+      "actor_id": "compare-harness",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:security",
+      "boundary": "before_security_advance",
+      "commit_id": "",
+      "event": "stage_approved",
+      "stage": "security",
+      "timestamp": "2026-05-27T02:15:41+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "gates_checked",
+      "execute_checks": false,
+      "gates": {
+        "security_checked": true
+      },
+      "stage": "security",
+      "timestamp": "2026-05-27T02:15:41+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "stage_advanced",
+      "from_stage": "security",
+      "timestamp": "2026-05-27T02:15:42+00:00",
+      "to_stage": "spec"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "artifact": "spec_doc",
+      "declared": true,
+      "event": "artifact_attached",
+      "stage": "spec",
+      "timestamp": "2026-05-27T02:15:42+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "artifact": "tasks_doc",
+      "declared": true,
+      "event": "artifact_attached",
+      "stage": "spec",
+      "timestamp": "2026-05-27T02:15:42+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "gates_checked",
+      "execute_checks": false,
+      "gates": {
+        "spec_approved": true
+      },
+      "stage": "spec",
+      "timestamp": "2026-05-27T02:15:43+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:spec",
+      "commit_id": "",
+      "event": "approval_requested",
+      "interaction": "binary_choice",
+      "review_boundary": "before_spec_advance",
+      "stage": "spec",
+      "timestamp": "2026-05-27T02:15:43+00:00"
+    },
+    {
+      "actor_id": "compare-harness",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:spec",
+      "commit_id": "",
+      "event": "approval_granted",
+      "review_boundary": "before_spec_advance",
+      "stage": "spec",
+      "timestamp": "2026-05-27T02:15:44+00:00"
+    },
+    {
+      "actor_id": "compare-harness",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:spec",
+      "boundary": "before_spec_advance",
+      "commit_id": "",
+      "event": "stage_approved",
+      "stage": "spec",
+      "timestamp": "2026-05-27T02:15:44+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "gates_checked",
+      "execute_checks": false,
+      "gates": {
+        "spec_approved": true
+      },
+      "stage": "spec",
+      "timestamp": "2026-05-27T02:15:44+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "stage_advanced",
+      "from_stage": "spec",
+      "timestamp": "2026-05-27T02:15:44+00:00",
+      "to_stage": "implement"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "artifact": "code_change_set",
+      "declared": true,
+      "event": "artifact_attached",
+      "stage": "implement",
+      "timestamp": "2026-05-27T02:15:45+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "artifact": "doc_updates",
+      "declared": true,
+      "event": "artifact_attached",
+      "stage": "implement",
+      "timestamp": "2026-05-27T02:15:45+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "artifact": "local_validation_log",
+      "declared": true,
+      "event": "artifact_attached",
+      "stage": "implement",
+      "timestamp": "2026-05-27T02:15:45+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "gates_checked",
+      "execute_checks": false,
+      "gates": {
+        "implementation_verified": true
+      },
+      "stage": "implement",
+      "timestamp": "2026-05-27T02:15:46+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:implement",
+      "commit_id": "",
+      "event": "approval_requested",
+      "interaction": "binary_choice",
+      "review_boundary": "before_implement_advance",
+      "stage": "implement",
+      "timestamp": "2026-05-27T02:15:46+00:00"
+    },
+    {
+      "actor_id": "compare-harness",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:implement",
+      "commit_id": "",
+      "event": "approval_granted",
+      "review_boundary": "before_implement_advance",
+      "stage": "implement",
+      "timestamp": "2026-05-27T02:15:46+00:00"
+    },
+    {
+      "actor_id": "compare-harness",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:implement",
+      "boundary": "before_implement_advance",
+      "commit_id": "",
+      "event": "stage_approved",
+      "stage": "implement",
+      "timestamp": "2026-05-27T02:15:46+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "gates_checked",
+      "execute_checks": false,
+      "gates": {
+        "implementation_verified": true
+      },
+      "stage": "implement",
+      "timestamp": "2026-05-27T02:15:47+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "stage_advanced",
+      "from_stage": "implement",
+      "timestamp": "2026-05-27T02:15:47+00:00",
+      "to_stage": "verify"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "artifact": "verification_report",
+      "declared": true,
+      "event": "artifact_attached",
+      "stage": "verify",
+      "timestamp": "2026-05-27T02:16:29+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "artifact": "evidence_ledger_entry",
+      "declared": true,
+      "event": "artifact_attached",
+      "stage": "verify",
+      "timestamp": "2026-05-27T02:16:29+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "gates_checked",
+      "execute_checks": false,
+      "gates": {
+        "evidence_recorded": true,
+        "verification_passed": true
+      },
+      "stage": "verify",
+      "timestamp": "2026-05-27T02:16:29+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:verify",
+      "commit_id": "",
+      "event": "approval_requested",
+      "interaction": "binary_choice",
+      "review_boundary": "before_verify_advance",
+      "stage": "verify",
+      "timestamp": "2026-05-27T02:16:29+00:00"
+    },
+    {
+      "actor_id": "compare-harness",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:verify",
+      "commit_id": "",
+      "event": "approval_granted",
+      "review_boundary": "before_verify_advance",
+      "stage": "verify",
+      "timestamp": "2026-05-27T02:16:30+00:00"
+    },
+    {
+      "actor_id": "compare-harness",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:verify",
+      "boundary": "before_verify_advance",
+      "commit_id": "",
+      "event": "stage_approved",
+      "stage": "verify",
+      "timestamp": "2026-05-27T02:16:30+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "gates_checked",
+      "execute_checks": false,
+      "gates": {
+        "evidence_recorded": true,
+        "verification_passed": true
+      },
+      "stage": "verify",
+      "timestamp": "2026-05-27T02:16:30+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "stage_advanced",
+      "from_stage": "verify",
+      "timestamp": "2026-05-27T02:16:30+00:00",
+      "to_stage": "archive"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "artifact": "delivery_summary",
+      "declared": true,
+      "event": "artifact_attached",
+      "stage": "archive",
+      "timestamp": "2026-05-27T02:16:30+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "artifact": "archive_record",
+      "declared": true,
+      "event": "artifact_attached",
+      "stage": "archive",
+      "timestamp": "2026-05-27T02:16:30+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "gates_checked",
+      "execute_checks": false,
+      "gates": {
+        "delivery_recorded": true,
+        "trace_recorded": true
+      },
+      "stage": "archive",
+      "timestamp": "2026-05-27T02:16:31+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:archive",
+      "commit_id": "",
+      "event": "approval_requested",
+      "interaction": "binary_choice",
+      "review_boundary": "before_archive_advance",
+      "stage": "archive",
+      "timestamp": "2026-05-27T02:16:31+00:00"
+    },
+    {
+      "actor_id": "compare-harness",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:archive",
+      "commit_id": "",
+      "event": "approval_granted",
+      "review_boundary": "before_archive_advance",
+      "stage": "archive",
+      "timestamp": "2026-05-27T02:16:31+00:00"
+    },
+    {
+      "actor_id": "compare-harness",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:archive",
+      "boundary": "before_archive_advance",
+      "commit_id": "",
+      "event": "stage_approved",
+      "stage": "archive",
+      "timestamp": "2026-05-27T02:16:31+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "gates_checked",
+      "execute_checks": false,
+      "gates": {
+        "delivery_recorded": true,
+        "trace_recorded": true
+      },
+      "stage": "archive",
+      "timestamp": "2026-05-27T02:16:31+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "stage_advanced",
+      "from_stage": "archive",
+      "timestamp": "2026-05-27T02:16:31+00:00",
+      "to_stage": "learn"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "artifact": "learning_record",
+      "declared": true,
+      "event": "artifact_attached",
+      "stage": "learn",
+      "timestamp": "2026-05-27T02:16:32+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "artifact": "index_update_request",
+      "declared": true,
+      "event": "artifact_attached",
+      "stage": "learn",
+      "timestamp": "2026-05-27T02:16:32+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "gates_checked",
+      "execute_checks": false,
+      "gates": {
+        "learning_captured": true
+      },
+      "stage": "learn",
+      "timestamp": "2026-05-27T02:16:32+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:learn",
+      "commit_id": "",
+      "event": "approval_requested",
+      "interaction": "binary_choice",
+      "review_boundary": "before_learn_advance",
+      "stage": "learn",
+      "timestamp": "2026-05-27T02:16:32+00:00"
+    },
+    {
+      "actor_id": "compare-harness",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:learn",
+      "commit_id": "",
+      "event": "approval_granted",
+      "review_boundary": "before_learn_advance",
+      "stage": "learn",
+      "timestamp": "2026-05-27T02:16:33+00:00"
+    },
+    {
+      "actor_id": "compare-harness",
+      "actor_type": "agent",
+      "approval_ref": "stage-review:RUN-build-a-frontend-based-reactshadcntailwi-20260527020509:learn",
+      "boundary": "before_learn_advance",
+      "commit_id": "",
+      "event": "stage_approved",
+      "stage": "learn",
+      "timestamp": "2026-05-27T02:16:33+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "gates_checked",
+      "execute_checks": false,
+      "gates": {
+        "learning_captured": true
+      },
+      "stage": "learn",
+      "timestamp": "2026-05-27T02:16:33+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "run_completed",
+      "stage": "learn",
+      "timestamp": "2026-05-27T02:16:33+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "event": "custom_event_recorded",
+      "event_type": "session_tokens_recorded",
+      "stage": "session",
+      "status": "success",
+      "timestamp": "2026-05-27T02:16:34+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "artifact": "dashboard_run_detail",
+      "declared": true,
+      "event": "artifact_attached",
+      "stage": "learn",
+      "timestamp": "2026-05-27T02:16:34+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "artifact": "dashboard_overview",
+      "declared": true,
+      "event": "artifact_attached",
+      "stage": "learn",
+      "timestamp": "2026-05-27T02:16:34+00:00"
+    },
+    {
+      "actor_id": "petershi",
+      "actor_type": "agent",
+      "detail_path": "ai-native/runtime/ai-process/runs/RUN-build-a-frontend-based-reactshadcntailwi-20260527020509/dashboard.html",
+      "event": "dashboards_generated",
+      "overview_path": "ai-native/runtime/ai-process/runs/dashboard.html",
+      "stage": "learn",
+      "timestamp": "2026-05-27T02:16:34+00:00"
+    }
+  ],
+  "inputs": {
+    "request": "build a frontend based react+shadcn+tailwindcss app that will read all skills, mcp, hook, rules from claude code and codex. user should be able to check detailed list for each category and even click specific item if it has description/readme.md to see the detail. user should be able to click a toggle to enable/disable skills/mcp/hook/rules in the list, maybe by simply delete it from original place and back up it in ~/.claude_bak ~/.codex_bak and restore it when user enables"
+  },
+  "notes": [],
+  "process_core_version": "draft-v0.1.0",
+  "profile": "standard",
+  "request_label": "build a frontend based react+shadcn+tailwindcss app that will read all skills, m",
+  "run_id": "RUN-build-a-frontend-based-reactshadcntailwi-20260527020509",
+  "run_label": "build-a-frontend-based-reactshadcntailwi",
+  "stage_statuses": {
+    "archive": "completed",
+    "clarify": "completed",
+    "implement": "completed",
+    "intake": "completed",
+    "learn": "completed",
+    "security": "completed",
+    "spec": "completed",
+    "verify": "completed"
+  },
+  "stage_timings": {
+    "archive": {
+      "duration_seconds": 1.0,
+      "entered_at": "2026-05-27T02:16:30+00:00",
+      "exited_at": "2026-05-27T02:16:31+00:00",
+      "status": "completed"
+    },
+    "clarify": {
+      "duration_seconds": 22.0,
+      "entered_at": "2026-05-27T02:14:57+00:00",
+      "exited_at": "2026-05-27T02:15:19+00:00",
+      "status": "completed"
+    },
+    "implement": {
+      "duration_seconds": 3.0,
+      "entered_at": "2026-05-27T02:15:44+00:00",
+      "exited_at": "2026-05-27T02:15:47+00:00",
+      "status": "completed"
+    },
+    "intake": {
+      "duration_seconds": 588.0,
+      "entered_at": "2026-05-27T02:05:09+00:00",
+      "exited_at": "2026-05-27T02:14:57+00:00",
+      "status": "completed"
+    },
+    "learn": {
+      "duration_seconds": 2.0,
+      "entered_at": "2026-05-27T02:16:31+00:00",
+      "exited_at": "2026-05-27T02:16:33+00:00",
+      "status": "completed"
+    },
+    "security": {
+      "duration_seconds": 23.0,
+      "entered_at": "2026-05-27T02:15:19+00:00",
+      "exited_at": "2026-05-27T02:15:42+00:00",
+      "status": "completed"
+    },
+    "spec": {
+      "duration_seconds": 2.0,
+      "entered_at": "2026-05-27T02:15:42+00:00",
+      "exited_at": "2026-05-27T02:15:44+00:00",
+      "status": "completed"
+    },
+    "verify": {
+      "duration_seconds": 43.0,
+      "entered_at": "2026-05-27T02:15:47+00:00",
+      "exited_at": "2026-05-27T02:16:30+00:00",
+      "status": "completed"
+    }
+  },
+  "status": "completed",
+  "ticket_key": "",
+  "updated_at": "2026-05-27T02:16:34+00:00"
+}
