@@ -1,7 +1,0 @@
-{
-  "mode": "command_only",
-  "commands": [
-    "npm test -- --run",
-    "npm run build"
-  ]
-}
