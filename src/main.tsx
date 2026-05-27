@@ -91,6 +91,7 @@ function App() {
   const [usageLoading, setUsageLoading] = React.useState(false);
   const [exportOpen, setExportOpen] = React.useState(false);
   const [exportProgress, setExportProgress] = React.useState<number | null>(null);
+  const [importProgress, setImportProgress] = React.useState<number | null>(null);
   const [importFile, setImportFile] = React.useState<File | null>(null);
   const [importInspection, setImportInspection] = React.useState<ImportInspection | null>(null);
   const importInputRef = React.useRef<HTMLInputElement>(null);
@@ -157,7 +158,7 @@ function App() {
   async function runExport(options: { filename: string; itemIds: string[]; saveHandle?: FileSystemFileHandle | null }) {
     setExportOpen(false);
     setBusy(true);
-    setExportProgress(-1);
+    setExportProgress(0);
     setError("");
     setStatus("Building archive — this can take a minute on a large env.");
     try {
@@ -223,18 +224,19 @@ function App() {
 
   async function replaceImportArchive(file: File) {
     setBusy(true);
+    setImportProgress(0);
     setError("");
     setImportFile(null);
     setImportInspection(null);
     setStatus(`Replacing env from ${file.name} — backing up current env first...`);
     try {
-      const response = await fetch("/api/import", {
+      const data = await requestJsonWithProgress("/api/import", {
         method: "POST",
         headers: { "Content-Type": "application/gzip" },
-        body: file
+        body: file,
+        onProgress: setImportProgress
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Import failed");
+      setImportProgress(1);
       setStatus(`Replaced env from ${data.restoredSources?.join(", ") ?? "archive"}. Pre-import backup at ${data.preImportBackup}.`);
       await loadItems();
     } catch (err) {
@@ -242,21 +244,23 @@ function App() {
       setStatus("");
     } finally {
       setBusy(false);
+      setImportProgress(null);
     }
   }
 
   async function inspectImportArchive(file: File) {
     setBusy(true);
+    setImportProgress(0);
     setError("");
     setStatus(`Scanning ${file.name}...`);
     try {
-      const response = await fetch("/api/import/inspect", {
+      const data = await requestJsonWithProgress("/api/import/inspect", {
         method: "POST",
         headers: { "Content-Type": "application/gzip" },
-        body: file
+        body: file,
+        onProgress: setImportProgress
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Archive scan failed");
+      setImportProgress(1);
       setImportInspection(data);
       setStatus(`Scanned ${file.name}: ${data.items?.length ?? 0} importable items.`);
     } catch (err) {
@@ -264,21 +268,23 @@ function App() {
       setStatus("");
     } finally {
       setBusy(false);
+      setImportProgress(null);
     }
   }
 
   async function appendImportArchive(token: string, itemIds: string[]) {
     setBusy(true);
+    setImportProgress(0);
     setError("");
     setStatus(`Appending ${itemIds.length} item${itemIds.length === 1 ? "" : "s"} from archive...`);
     try {
-      const response = await fetch("/api/import/append", {
+      const data = await requestJsonWithProgress("/api/import/append", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, itemIds })
+        body: JSON.stringify({ token, itemIds }),
+        onProgress: setImportProgress
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error ?? "Append import failed");
+      setImportProgress(1);
       setImportFile(null);
       setImportInspection(null);
       setStatus(`Appended ${data.appendedItems?.length ?? itemIds.length} item${(data.appendedItems?.length ?? itemIds.length) === 1 ? "" : "s"} from archive.`);
@@ -288,6 +294,7 @@ function App() {
       setStatus("");
     } finally {
       setBusy(false);
+      setImportProgress(null);
     }
   }
 
@@ -325,6 +332,8 @@ function App() {
   const usageTotal = Object.values(usageById).reduce((acc, usage) => acc + usage.total, 0);
   const contextTotal = itemsForTool.reduce((acc, item) => acc + item.context.estimatedTokens, 0);
   const selectedUsage = selected ? usageById[selected.id] : undefined;
+  const exportProgressText = formatProgressPercent(exportProgress);
+  const importProgressText = formatProgressPercent(importProgress);
 
   return (
     <main className="min-h-screen">
@@ -355,11 +364,16 @@ function App() {
                 />
               ) : null}
               <Download className="relative h-4 w-4" />
-              <span className="relative">Export</span>
+              <span className="relative">{exportProgressText ?? "Export"}</span>
             </Button>
-            <Button variant="outline" onClick={() => importInputRef.current?.click()} disabled={busy || loading}>
+            <Button
+              variant="outline"
+              onClick={() => importInputRef.current?.click()}
+              disabled={busy || loading}
+              className={importProgress != null ? "disabled:opacity-100" : ""}
+            >
               <Upload className="h-4 w-4" />
-              Import
+              {importProgressText ?? "Import"}
             </Button>
             <Button variant="outline" onClick={() => void loadItems()} disabled={loading || busy}>
               <RefreshCw className="h-4 w-4" />
@@ -546,6 +560,7 @@ function App() {
           file={importFile}
           inspection={importInspection}
           busy={busy}
+          progressText={importProgressText}
           onCancel={() => {
             setImportFile(null);
             setImportInspection(null);
@@ -832,6 +847,7 @@ function ImportDialog({
   file,
   inspection,
   busy,
+  progressText,
   onCancel,
   onReplace,
   onInspect,
@@ -840,6 +856,7 @@ function ImportDialog({
   file: File;
   inspection: ImportInspection | null;
   busy: boolean;
+  progressText: string | null;
   onCancel: () => void;
   onReplace: () => void;
   onInspect: () => void;
@@ -1014,17 +1031,17 @@ function ImportDialog({
           {mode === "replace" ? (
             <Button onClick={onReplace} disabled={busy}>
               <Upload className="h-4 w-4" />
-              Replace current
+              {progressText ?? "Replace current"}
             </Button>
           ) : !inspection ? (
             <Button onClick={onInspect} disabled={busy}>
               <Search className="h-4 w-4" />
-              Scan archive
+              {progressText ?? "Scan archive"}
             </Button>
           ) : (
             <Button onClick={() => onAppend(Array.from(selected))} disabled={busy || totalSelected === 0}>
               <Upload className="h-4 w-4" />
-              Append {totalSelected} item{totalSelected === 1 ? "" : "s"}
+              {progressText ?? `Append ${totalSelected} item${totalSelected === 1 ? "" : "s"}`}
             </Button>
           )}
         </div>
@@ -1078,6 +1095,54 @@ function TriCheckbox({ state, onChange }: { state: "all" | "some" | "none"; onCh
       onClick={(event) => event.stopPropagation()}
     />
   );
+}
+
+function requestJsonWithProgress<T = any>(
+  url: string,
+  {
+    method,
+    headers,
+    body,
+    onProgress
+  }: {
+    method: string;
+    headers: Record<string, string>;
+    body: XMLHttpRequestBodyInit;
+    onProgress: (progress: number) => void;
+  }
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(method, url);
+    for (const [key, value] of Object.entries(headers)) xhr.setRequestHeader(key, value);
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable || event.total === 0) return;
+      onProgress(Math.min(0.95, event.loaded / event.total));
+    };
+    xhr.onload = () => {
+      const data = parseJsonResponse(xhr.responseText);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve(data as T);
+        return;
+      }
+      reject(new Error((data as { error?: string }).error ?? "Request failed"));
+    };
+    xhr.onerror = () => reject(new Error("Network request failed"));
+    xhr.send(body);
+  });
+}
+
+function parseJsonResponse(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return {};
+  }
+}
+
+function formatProgressPercent(progress: number | null): string | null {
+  if (progress == null) return null;
+  return `${Math.round(Math.max(0, Math.min(1, progress)) * 100)}%`;
 }
 
 function formatBytes(bytes: number): string {
