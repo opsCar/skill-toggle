@@ -451,8 +451,8 @@ function App() {
       <header className="sticky top-0 z-30 border-b border-border/70 bg-background/85 backdrop-blur-xl">
         <div className="mx-auto flex max-w-[1500px] items-center justify-between gap-6 px-6 py-3.5">
           <div className="flex items-center gap-3">
-            <div className="relative flex h-9 w-9 items-center justify-center rounded-lg bg-foreground text-background card-edge">
-              <Sparkles className="h-[18px] w-[18px]" strokeWidth={1.6} />
+            <div className="relative flex size-9 items-center justify-center rounded-lg bg-foreground text-background card-edge">
+              <Sparkles className="size-[18px]" strokeWidth={1.6} />
             </div>
             <div className="leading-tight">
               <div className="flex items-center gap-2">
@@ -480,7 +480,7 @@ function App() {
           </div>
 
           <div className="flex items-center gap-2">
-            <input ref={importInputRef} type="file" accept=".tar.gz,.tgz,application/gzip,application/x-gzip" className="hidden" onChange={onImportPicked} />
+            <input ref={importInputRef} type="file" accept=".tar.gz,.tgz,application/gzip,application/x-gzip" className="hidden" onChange={onImportPicked} aria-label="Import archive file" />
             <Button
               variant="outline"
               size="sm"
@@ -497,7 +497,7 @@ function App() {
                   style={exportProgress >= 0 ? { width: `${Math.round(exportProgress * 100)}%` } : undefined}
                 />
               ) : null}
-              <Download className="relative h-3.5 w-3.5" strokeWidth={1.75} />
+              <Download className="relative size-3.5" strokeWidth={1.75} />
               <span className="relative font-mono text-[12px]">{exportProgressText ?? "Export"}</span>
             </Button>
             <Button
@@ -507,7 +507,7 @@ function App() {
               disabled={busy || loading}
               className={`h-9 px-3 ${importProgress != null ? "disabled:opacity-100" : ""}`}
             >
-              <Upload className="h-3.5 w-3.5" strokeWidth={1.75} />
+              <Upload className="size-3.5" strokeWidth={1.75} />
               <span className="font-mono text-[12px]">{importProgressText ?? "Import"}</span>
             </Button>
             <Button
@@ -516,9 +516,9 @@ function App() {
               onClick={() => void loadItems()}
               disabled={loading || busy || contextProbeLoading}
               title="Refresh inventory"
-              className="h-9 w-9 text-muted-foreground hover:text-foreground"
+              className="size-9 text-muted-foreground hover:text-foreground"
             >
-              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} strokeWidth={1.75} />
+              <RefreshCw className={`size-4 ${loading ? "animate-spin" : ""}`} strokeWidth={1.75} />
             </Button>
           </div>
         </div>
@@ -526,13 +526,13 @@ function App() {
           <div className="mx-auto flex max-w-[1500px] items-center gap-2 px-6 pb-2.5 text-[11px] text-muted-foreground">
             {usageLoading ? (
               <span className="inline-flex items-center gap-1.5">
-                <Activity className="h-3 w-3 animate-pulse text-primary" strokeWidth={2} />
+                <Activity className="size-3 animate-pulse text-primary" strokeWidth={2} />
                 Scanning Claude/Codex history…
               </span>
             ) : null}
             {contextProbeLoading ? (
               <span className="inline-flex items-center gap-1.5">
-                <Activity className="h-3 w-3 animate-pulse text-primary" strokeWidth={2} />
+                <Activity className="size-3 animate-pulse text-primary" strokeWidth={2} />
                 Probing baseline context…
               </span>
             ) : null}
@@ -541,11 +541,11 @@ function App() {
         ) : null}
       </header>
 
-      <div className="mx-auto grid max-w-[1500px] grid-cols-[244px_minmax(340px,500px)_1fr] gap-6 px-6 py-6">
+      <div className="mx-auto grid max-w-[1500px] grid-cols-[244px_minmax(340px,500px)_1fr] gap-6 p-6">
         <aside>
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.12em] text-muted-foreground">
-              <SlidersHorizontal className="h-3 w-3" strokeWidth={2} />
+              <SlidersHorizontal className="size-3" strokeWidth={2} />
               Filters
             </div>
             {invalidSkillCount > 0 ? (
@@ -557,6 +557,7 @@ function App() {
             {(["all", "claude", "codex"] as const).map((key) => (
               <button
                 key={key}
+                type="button"
                 onClick={() => setTool(key)}
                 className={`relative flex-1 rounded-[6px] px-2 py-1.5 text-[12px] font-medium capitalize transition-all duration-150 press ${
                   tool === key
@@ -576,6 +577,7 @@ function App() {
               return (
                 <button
                   key={key}
+                  type="button"
                   className={`group relative flex h-9 w-full items-center gap-2.5 rounded-md pl-3 pr-2.5 text-[13px] transition-colors press ${
                     active ? "bg-card text-foreground card-edge" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                   }`}
@@ -587,7 +589,7 @@ function App() {
                       active ? "bg-primary" : "bg-transparent group-hover:bg-border"
                     }`}
                   />
-                  <Icon className={`h-3.5 w-3.5 ${active ? "text-foreground" : ""}`} strokeWidth={1.75} />
+                  <Icon className={`size-3.5 ${active ? "text-foreground" : ""}`} strokeWidth={1.75} />
                   <span className="flex-1 text-left">{label}</span>
                   <span className={`font-mono text-[11px] tabular-nums ${active ? "text-foreground" : "text-muted-foreground/80"}`}>{count}</span>
                 </button>
@@ -599,8 +601,9 @@ function App() {
 
         <section className="min-w-0">
           <label className="mb-3 flex h-10 items-center gap-2 rounded-md border border-border bg-card px-3 transition-colors focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-ring/20">
-            <Search className="h-3.5 w-3.5 text-muted-foreground" strokeWidth={1.75} />
+            <Search className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
             <input
+              aria-label="Search inventory"
               className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/60"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -608,11 +611,12 @@ function App() {
             />
             {query ? (
               <button
+                type="button"
                 onClick={() => setQuery("")}
                 className="rounded p-0.5 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
                 aria-label="Clear search"
               >
-                <X className="h-3 w-3" strokeWidth={2} />
+                <X className="size-3" strokeWidth={2} />
               </button>
             ) : null}
             <span className="font-mono text-[10px] tabular-nums text-muted-foreground/70">{filtered.length}</span>
@@ -631,8 +635,8 @@ function App() {
                 </div>
               ) : filtered.length === 0 ? (
                 <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
-                  <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                    <Search className="h-4 w-4" strokeWidth={1.75} />
+                  <div className="mb-3 flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <Search className="size-4" strokeWidth={1.75} />
                   </div>
                   <div className="text-[13px] font-medium">No matching items</div>
                   <div className="mt-1 text-[12px] text-muted-foreground">Try a different search or clear your filters.</div>
@@ -650,6 +654,7 @@ function App() {
                         style={{ ["--index" as any]: index < 24 ? index : 0 }}
                       >
                         <button
+                          type="button"
                           className={`group relative flex w-full items-start px-3.5 py-3 text-left transition-colors press ${
                             isActive ? "bg-muted/60" : "hover:bg-muted/40"
                           }`}
@@ -662,13 +667,13 @@ function App() {
                             }`}
                           />
                           <span
-                            className={`mt-1 flex h-3 w-3 shrink-0 items-center justify-center ${item.enabled ? "text-primary" : "text-muted-foreground/40"}`}
+                            className={`mt-1 flex size-3 shrink-0 items-center justify-center ${item.enabled ? "text-primary" : "text-muted-foreground/40"}`}
                             title={item.enabled ? "Enabled" : "Disabled"}
                           >
                             {item.enabled ? (
-                              <span className="block h-2 w-2 rounded-full bg-current shadow-[0_0_0_3px_currentColor]/[.12]" />
+                              <span className="block size-2 rounded-full bg-current shadow-[0_0_0_3px_currentColor]/[.12]" />
                             ) : (
-                              <Circle className="h-2.5 w-2.5" strokeWidth={1.5} />
+                              <Circle className="size-2.5" strokeWidth={1.5} />
                             )}
                           </span>
                           <div className="min-w-0 flex-1">
@@ -702,7 +707,7 @@ function App() {
                             </div>
                           </div>
                           <ChevronRight
-                            className={`mt-1 h-3.5 w-3.5 shrink-0 transition-all ${
+                            className={`mt-1 size-3.5 shrink-0 transition-all ${
                               isActive ? "translate-x-0 text-foreground" : "-translate-x-1 text-muted-foreground/0 group-hover:translate-x-0 group-hover:text-muted-foreground"
                             }`}
                             strokeWidth={1.75}
@@ -726,7 +731,7 @@ function App() {
                     <h2 className="truncate text-[18px] font-semibold tracking-tightish">{selected.name}</h2>
                     {selected.enabled ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wider text-primary">
-                        <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                        <Check className="size-2.5" strokeWidth={3} />
                         on
                       </span>
                     ) : (
@@ -738,7 +743,7 @@ function App() {
                   </div>
                   <div className="mt-1 truncate font-mono text-[11.5px] text-muted-foreground">{selected.path ?? selected.backupPath}</div>
                   {selected.category === "skills" && !selected.valid ? (
-                    <div className="mt-2 rounded-md border-l-2 border-destructive bg-destructive/5 px-3 py-1.5 text-[12px] text-destructive">
+                    <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-1.5 text-[12px] text-destructive">
                       {selected.invalidReason ?? "Skill is invalid"}
                     </div>
                   ) : null}
@@ -805,8 +810,8 @@ function App() {
             </div>
           ) : (
             <div className="flex h-[calc(100dvh-138px)] flex-col items-center justify-center rounded-md border border-dashed border-border bg-card/40">
-              <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                <Boxes className="h-5 w-5" strokeWidth={1.5} />
+              <div className="mb-3 flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <Boxes className="size-5" strokeWidth={1.5} />
               </div>
               <div className="text-[14px] font-medium">Select an item</div>
               <div className="mt-1 max-w-[28ch] text-center text-[12px] text-muted-foreground">
@@ -889,8 +894,8 @@ function StartupProbePanel({
           <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Startup probe</div>
           <div className="mt-0.5 truncate text-[12px] text-muted-foreground">from session history</div>
         </div>
-        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onRefresh} disabled={loading} title="Refresh startup probe">
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} strokeWidth={1.75} />
+        <Button variant="ghost" size="icon" className="size-7 shrink-0" onClick={onRefresh} disabled={loading} title="Refresh startup probe">
+          <RefreshCw className={`size-3.5 ${loading ? "animate-spin" : ""}`} strokeWidth={1.75} />
         </Button>
       </div>
 
@@ -997,10 +1002,14 @@ function ExportDialog({
     const tools = Array.from(map.keys()).sort();
     return tools.map((tool) => {
       const toolMap = map.get(tool)!;
-      const cats = CATEGORY_ORDER.filter((cat) => toolMap.has(cat)).map((cat) => ({
-        category: cat,
-        items: (toolMap.get(cat) ?? []).slice().sort((a, b) => a.name.localeCompare(b.name))
-      }));
+      const cats = CATEGORY_ORDER.flatMap((cat) =>
+        toolMap.has(cat)
+          ? [{
+              category: cat,
+              items: (toolMap.get(cat) ?? []).slice().sort((a, b) => a.name.localeCompare(b.name))
+            }]
+          : []
+      );
       return { tool, categories: cats };
     });
   }, [items]);
@@ -1065,7 +1074,7 @@ function ExportDialog({
         <div className="flex items-start justify-between gap-4 border-b border-border/70 px-5 py-4">
           <div>
             <div className="flex items-center gap-2">
-              <Download className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} />
+              <Download className="size-4 text-muted-foreground" strokeWidth={1.75} />
               <h2 className="text-[15px] font-semibold tracking-tightish">Export setup</h2>
             </div>
             <p className="mt-1 text-[12px] text-muted-foreground">
@@ -1074,8 +1083,8 @@ function ExportDialog({
               <span className="font-mono tabular-nums">{items.length}</span> items selected.
             </p>
           </div>
-          <button onClick={onCancel} className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Close">
-            <X className="h-4 w-4" />
+          <button type="button" onClick={onCancel} className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Close">
+            <X className="size-4" />
           </button>
         </div>
 
@@ -1083,6 +1092,7 @@ function ExportDialog({
           <label className="flex flex-col gap-1.5">
             <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Filename</span>
             <input
+              aria-label="Export filename"
               className="h-9 rounded-md border border-border bg-background px-3 font-mono text-[12.5px] outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-ring/20"
               value={filename}
               onChange={(event) => {
@@ -1095,7 +1105,7 @@ function ExportDialog({
             <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Save location</span>
             {supportsFilePicker ? (
               <Button type="button" variant="outline" onClick={() => void chooseLocation()}>
-                <FolderCog className="h-3.5 w-3.5" strokeWidth={1.75} />
+                <FolderCog className="size-3.5" strokeWidth={1.75} />
                 {saveHandle ? "Change…" : "Choose…"}
               </Button>
             ) : (
@@ -1111,12 +1121,13 @@ function ExportDialog({
           <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Scope · pre-selected</span>
           <div className="flex items-center gap-2">
             <button
+              type="button"
               className="rounded-md border border-border bg-card px-2 py-1 text-[11px] transition-colors press hover:bg-muted/60"
               onClick={() => setSelected(new Set(items.map((item) => item.id)))}
             >
               Select all
             </button>
-            <button className="rounded-md border border-border bg-card px-2 py-1 text-[11px] transition-colors press hover:bg-muted/60" onClick={() => setSelected(new Set())}>
+            <button type="button" className="rounded-md border border-border bg-card px-2 py-1 text-[11px] transition-colors press hover:bg-muted/60" onClick={() => setSelected(new Set())}>
               Clear
             </button>
           </div>
@@ -1133,11 +1144,12 @@ function ExportDialog({
                 <div key={tool} className="mb-3 overflow-hidden rounded-md border border-border bg-card">
                   <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
                     <button
+                      type="button"
                       onClick={() => toggleExpanded(toolKey)}
-                      className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      className="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                       aria-label={isExpanded ? "Collapse" : "Expand"}
                     >
-                      {isExpanded ? <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} /> : <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} />}
+                      {isExpanded ? <ChevronDown className="size-3.5" strokeWidth={1.75} /> : <ChevronRight className="size-3.5" strokeWidth={1.75} />}
                     </button>
                     <TriCheckbox
                       state={toolStatus}
@@ -1160,11 +1172,12 @@ function ExportDialog({
                           <div key={category} className="overflow-hidden rounded-md border border-border/70 bg-card">
                             <div className="flex items-center gap-2 px-3 py-1.5">
                               <button
+                                type="button"
                                 onClick={() => toggleExpanded(catKey)}
-                                className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                className="flex size-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                 aria-label={catExpanded ? "Collapse" : "Expand"}
                               >
-                                {catExpanded ? <ChevronDown className="h-3 w-3" strokeWidth={1.75} /> : <ChevronRight className="h-3 w-3" strokeWidth={1.75} />}
+                                {catExpanded ? <ChevronDown className="size-3" strokeWidth={1.75} /> : <ChevronRight className="size-3" strokeWidth={1.75} />}
                               </button>
                               <TriCheckbox state={catStatus} onChange={(checked) => setMany(catItems.map((item) => item.id), checked)} />
                               <div className="flex-1 text-[12.5px]">{CATEGORY_LABELS[category]}</div>
@@ -1219,7 +1232,7 @@ function ExportDialog({
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={onCancel}>Cancel</Button>
             <Button variant="primary" onClick={handleExport} disabled={totalSelected === 0}>
-              <Download className="h-3.5 w-3.5" strokeWidth={1.75} />
+              <Download className="size-3.5" strokeWidth={1.75} />
               Export {totalSelected} item{totalSelected === 1 ? "" : "s"}
             </Button>
           </div>
@@ -1285,20 +1298,21 @@ function ImportDialog({
         <div className="flex items-start justify-between gap-4 border-b border-border/70 px-5 py-4">
           <div>
             <div className="flex items-center gap-2">
-              <Upload className="h-4 w-4 text-muted-foreground" strokeWidth={1.75} />
+              <Upload className="size-4 text-muted-foreground" strokeWidth={1.75} />
               <h2 className="text-[15px] font-semibold tracking-tightish">Import archive</h2>
             </div>
             <p className="mt-1 font-mono text-[11.5px] text-muted-foreground">
               {file.name} · {formatBytes(file.size)}
             </p>
           </div>
-          <button onClick={onCancel} className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Close">
-            <X className="h-4 w-4" />
+          <button type="button" onClick={onCancel} className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Close">
+            <X className="size-4" />
           </button>
         </div>
 
         <div className="grid gap-3 border-b border-border/70 px-5 py-4 sm:grid-cols-2">
           <button
+            type="button"
             className={`relative overflow-hidden rounded-md border p-3 text-left transition-all press ${
               mode === "replace" ? "border-foreground/30 bg-card card-edge" : "border-border hover:bg-muted/40"
             }`}
@@ -1311,6 +1325,7 @@ function ImportDialog({
             </div>
           </button>
           <button
+            type="button"
             className={`relative overflow-hidden rounded-md border p-3 text-left transition-all press ${
               mode === "append" ? "border-foreground/30 bg-card card-edge" : "border-border hover:bg-muted/40"
             }`}
@@ -1325,7 +1340,7 @@ function ImportDialog({
         </div>
 
         {mode === "replace" ? (
-          <div className="px-5 py-5 text-[12.5px] leading-relaxed text-muted-foreground">
+          <div className="p-5 text-[12.5px] leading-relaxed text-muted-foreground">
             This mode replaces the archive's top-level env folders, including matching disabled-item backups, after writing a backup tar under{" "}
             <span className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">~/.skill-toggle-backups/</span>.
           </div>
@@ -1338,12 +1353,14 @@ function ImportDialog({
               {inspection ? (
                 <div className="flex items-center gap-2">
                   <button
+                    type="button"
                     className="rounded-md border border-border bg-card px-2 py-1 text-[11px] transition-colors press hover:bg-muted/60"
                     onClick={() => setSelected(new Set(inspection.items.map((item) => item.id)))}
                   >
                     Select all
                   </button>
                   <button
+                    type="button"
                     className="rounded-md border border-border bg-card px-2 py-1 text-[11px] transition-colors press hover:bg-muted/60"
                     onClick={() => setSelected(new Set())}
                   >
@@ -1372,11 +1389,12 @@ function ImportDialog({
                       <div key={tool} className="mb-3 overflow-hidden rounded-md border border-border bg-card">
                         <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
                           <button
+                            type="button"
                             onClick={() => toggleExpanded(toolKey)}
-                            className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                            className="flex size-6 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                             aria-label={isExpanded ? "Collapse" : "Expand"}
                           >
-                            {isExpanded ? <ChevronDown className="h-3.5 w-3.5" strokeWidth={1.75} /> : <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.75} />}
+                            {isExpanded ? <ChevronDown className="size-3.5" strokeWidth={1.75} /> : <ChevronRight className="size-3.5" strokeWidth={1.75} />}
                           </button>
                           <TriCheckbox state={toolStatus} onChange={(checked) => setMany(toolItems.map((item) => item.id), checked)} />
                           <div className="flex-1 text-[13px] font-medium">{TOOL_LABELS[tool]}</div>
@@ -1394,11 +1412,12 @@ function ImportDialog({
                                 <div key={category} className="overflow-hidden rounded-md border border-border/70 bg-card">
                                   <div className="flex items-center gap-2 px-3 py-1.5">
                                     <button
+                                      type="button"
                                       onClick={() => toggleExpanded(catKey)}
-                                      className="flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                      className="flex size-5 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                                       aria-label={catExpanded ? "Collapse" : "Expand"}
                                     >
-                                      {catExpanded ? <ChevronDown className="h-3 w-3" strokeWidth={1.75} /> : <ChevronRight className="h-3 w-3" strokeWidth={1.75} />}
+                                      {catExpanded ? <ChevronDown className="size-3" strokeWidth={1.75} /> : <ChevronRight className="size-3" strokeWidth={1.75} />}
                                     </button>
                                     <TriCheckbox state={catStatus} onChange={(checked) => setMany(catItems.map((item) => item.id), checked)} />
                                     <div className="flex-1 text-[12.5px]">{CATEGORY_LABELS[category]}</div>
@@ -1445,17 +1464,17 @@ function ImportDialog({
             <Button variant="outline" onClick={onCancel}>Cancel</Button>
             {mode === "replace" ? (
               <Button variant="primary" onClick={onReplace} disabled={busy}>
-                <Upload className="h-3.5 w-3.5" strokeWidth={1.75} />
+                <Upload className="size-3.5" strokeWidth={1.75} />
                 {progressText ?? "Replace current"}
               </Button>
             ) : !inspection ? (
               <Button variant="primary" onClick={onInspect} disabled={busy}>
-                <Search className="h-3.5 w-3.5" strokeWidth={1.75} />
+                <Search className="size-3.5" strokeWidth={1.75} />
                 {progressText ?? "Scan archive"}
               </Button>
             ) : (
               <Button variant="primary" onClick={() => onAppend(Array.from(selected))} disabled={busy || totalSelected === 0}>
-                <Upload className="h-3.5 w-3.5" strokeWidth={1.75} />
+                <Upload className="size-3.5" strokeWidth={1.75} />
                 {progressText ?? `Append ${totalSelected} item${totalSelected === 1 ? "" : "s"}`}
               </Button>
             )}
@@ -1480,10 +1499,14 @@ function groupItems<T extends InventoryItem>(items: T[]) {
   }
   return Array.from(map.keys()).sort().map((tool) => {
     const toolMap = map.get(tool)!;
-    const cats = CATEGORY_ORDER.filter((cat) => toolMap.has(cat)).map((cat) => ({
-      category: cat,
-      items: (toolMap.get(cat) ?? []).slice().sort((a, b) => a.name.localeCompare(b.name))
-    }));
+    const cats = CATEGORY_ORDER.flatMap((cat) =>
+      toolMap.has(cat)
+        ? [{
+            category: cat,
+            items: (toolMap.get(cat) ?? []).slice().sort((a, b) => a.name.localeCompare(b.name))
+          }]
+        : []
+    );
     return { tool, categories: cats };
   });
 }
@@ -1505,7 +1528,8 @@ function TriCheckbox({ state, onChange }: { state: "all" | "some" | "none"; onCh
     <input
       ref={ref}
       type="checkbox"
-      className="h-[14px] w-[14px] cursor-pointer rounded accent-foreground transition-transform active:scale-90"
+      aria-label="Toggle selection"
+      className="size-[14px] cursor-pointer rounded accent-foreground transition-transform active:scale-90"
       checked={state === "all"}
       onChange={(event) => onChange(event.target.checked)}
       onClick={(event) => event.stopPropagation()}
@@ -1573,8 +1597,9 @@ function formatBytes(bytes: number): string {
   return `${value < 10 && unit > 0 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`;
 }
 
+const numberFormatter = new Intl.NumberFormat();
 function formatNumber(value: number): string {
-  return new Intl.NumberFormat().format(value);
+  return numberFormatter.format(value);
 }
 
 function formatDate(value: string): string {
@@ -1594,7 +1619,7 @@ function usageSignal(usage?: UsageStats): string {
     ["agent", usage.agent],
     ["plugin", usage.plugin]
   ];
-  return rows.sort((a, b) => b[1] - a[1])[0][0];
+  return rows.reduce((best, row) => (row[1] > best[1] ? row : best))[0];
 }
 
 function Field({
