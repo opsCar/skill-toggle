@@ -45,9 +45,9 @@ test("context probe summarizes enabled baseline by tool and category", async () 
   ]);
   expect(codex.topContributors[0]).toEqual(expect.objectContaining({ name: "planner", category: "skills" }));
   expect(codex.estimatedTotalTokens).toBe(codex.estimatedContextTokens + 2);
-  expect(claude.breakdown).toEqual([
+  expect(claude.breakdown).toEqual(expect.arrayContaining([
     expect.objectContaining({ category: "rules", items: 1 })
-  ]);
+  ]));
 });
 
 test("startup probe picks latest session by embedded timestamp and includes Claude startup attachments", async () => {

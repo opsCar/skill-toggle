@@ -143,7 +143,7 @@ export async function getStartupProbe() {
 
 function probeForTool(tool: ToolName, items: InventoryItem[], promptTokens: number): ContextProbeTool {
   const enabled = items.filter((item) => item.tool === tool && item.enabled);
-  const breakdown = (["skills", "agents", "plugins", "mcp", "hooks", "rules"] as const)
+  const breakdown = (["skills", "agents", "plugins", "mcp", "hooks", "rules", "tools"] as const)
     .map((category) => {
       const categoryItems = enabled.filter((item) => item.category === category);
       return {
@@ -534,7 +534,9 @@ function itemMatchers(item: InventoryItem): Array<(event: UsageEvent) => boolean
     (event) => item.category === "rules" && event.kind === "rule" && pathText.includes(normalize(event.name)),
     (event) => item.category === "hooks" && event.kind === "hook" && pathText.includes(normalize(event.name)),
     (event) => item.category === "agents" && event.kind === "agent" && pathText.includes(normalize(event.name)),
-    (event) => item.category === "plugins" && event.kind === "plugin" && pathText.includes(normalize(event.name))
+    (event) => item.category === "plugins" && event.kind === "plugin" && pathText.includes(normalize(event.name)),
+    (event) => item.category === "tools" && event.kind === "tool" && (normalize(event.name) === normalize(item.path ?? item.name) || normalize(event.name) === name),
+    (event) => item.category === "tools" && event.kind === "mcp" && normalize((item.path ?? "").replace(/^mcp__/, "").replace(/__/g, ":")) === normalize(event.name)
   ];
 }
 
@@ -545,6 +547,7 @@ function kindForCategory(category: Category): UsageKind {
   if (category === "rules") return "rule";
   if (category === "agents") return "agent";
   if (category === "plugins") return "plugin";
+  if (category === "tools") return "tool";
   return "tool";
 }
 

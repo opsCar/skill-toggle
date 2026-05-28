@@ -1,5 +1,5 @@
 export type Provider = "claude" | "codex";
-export type Category = "skill" | "mcp" | "hook" | "rule" | "agent" | "plugin";
+export type Category = "skill" | "mcp" | "hook" | "rule" | "agent" | "plugin" | "tool";
 export type Scope = "project" | "home";
 export type Status = "enabled" | "disabled";
 

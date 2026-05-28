@@ -1,4 +1,4 @@
-export type ItemCategory = "skills" | "mcp" | "hooks" | "rules" | "agents" | "plugins";
+export type ItemCategory = "skills" | "mcp" | "hooks" | "rules" | "agents" | "plugins" | "tools";
 export type ItemSource = "claude" | "codex";
 
 export type InventoryItem = {

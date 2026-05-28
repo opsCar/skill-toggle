@@ -20,6 +20,7 @@ import {
   Sparkles,
   Upload,
   UsersRound,
+  Wrench,
   X
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -28,13 +29,13 @@ import { Switch } from "@/components/ui/switch";
 import "./index.css";
 
 type ToolName = "claude" | "codex";
-type Category = "skills" | "mcp" | "hooks" | "rules" | "agents" | "plugins";
+type Category = "skills" | "mcp" | "hooks" | "rules" | "agents" | "plugins" | "tools";
 
 interface InventoryItem {
   id: string;
   tool: ToolName;
   category: Category;
-  kind: "path" | "config-entry";
+  kind: "path" | "config-entry" | "session-derived";
   name: string;
   enabled: boolean;
   description: string;
@@ -164,6 +165,7 @@ interface StartupProbe {
 const categories: Array<{ key: Category | "all"; label: string; icon: React.ElementType }> = [
   { key: "all", label: "All", icon: Boxes },
   { key: "skills", label: "Skills", icon: BookOpen },
+  { key: "tools", label: "Tools", icon: Wrench },
   { key: "mcp", label: "MCP", icon: FileJson },
   { key: "hooks", label: "Hooks", icon: Code2 },
   { key: "rules", label: "Rules", icon: ShieldCheck },
@@ -748,19 +750,30 @@ function App() {
                     </div>
                   ) : null}
                 </div>
-                <div className="flex items-center gap-2.5 rounded-md border border-border bg-background/60 px-2.5 py-1.5">
-                  <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                    {selected.enabled ? "On" : "Off"}
-                  </span>
-                  <Switch checked={selected.enabled} onCheckedChange={(checked) => void toggleItem(selected, checked)} />
-                </div>
+                {selected.kind === "session-derived" ? (
+                  <div className="flex max-w-[280px] items-center gap-2 rounded-md border border-dashed border-border bg-background/60 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+                    <Wrench className="size-3.5 shrink-0" strokeWidth={1.75} />
+                    <span>
+                      {selected.source.startsWith("mcp:")
+                        ? `Disable via the MCP entry "${selected.source.slice(4)}".`
+                        : "Built-in tool · diagnostic only."}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2.5 rounded-md border border-border bg-background/60 px-2.5 py-1.5">
+                    <span className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
+                      {selected.enabled ? "On" : "Off"}
+                    </span>
+                    <Switch checked={selected.enabled} onCheckedChange={(checked) => void toggleItem(selected, checked)} />
+                  </div>
+                )}
               </header>
 
               <div className="flex-shrink-0 border-b border-border/60 px-5 py-3.5">
                 <div className="grid grid-cols-2 gap-x-6 gap-y-2 md:grid-cols-4">
                   <Field label="Tool" value={TOOL_LABELS[selected.tool]} />
                   <Field label="Category" value={CATEGORY_LABELS[selected.category]} />
-                  <Field label="Kind" value={selected.kind === "path" ? "Path" : "Config entry"} />
+                  <Field label="Kind" value={selected.kind === "path" ? "Path" : selected.kind === "session-derived" ? "Session-derived" : "Config entry"} />
                   <Field label="Source" value={selected.source} mono truncate />
                 </div>
               </div>
@@ -856,6 +869,7 @@ const TOOL_LABELS: Record<ToolName, string> = {
 
 const CATEGORY_LABELS: Record<Category, string> = {
   skills: "Skills",
+  tools: "Tools",
   mcp: "MCP",
   hooks: "Hooks",
   rules: "Rules",
@@ -863,7 +877,7 @@ const CATEGORY_LABELS: Record<Category, string> = {
   plugins: "Plugins"
 };
 
-const CATEGORY_ORDER: Category[] = ["skills", "agents", "plugins", "mcp", "hooks", "rules"];
+const CATEGORY_ORDER: Category[] = ["skills", "tools", "agents", "plugins", "mcp", "hooks", "rules"];
 
 interface ExportSelection {
   filename: string;
@@ -982,14 +996,15 @@ function ExportDialog({
   }, []);
   const [filename, setFilename] = React.useState(defaultFilename);
   const [saveHandle, setSaveHandle] = React.useState<FileSystemFileHandle | null>(null);
-  const [selected, setSelected] = React.useState<Set<string>>(() => new Set(items.map((item) => item.id)));
+  const exportableItems = React.useMemo(() => items.filter((item) => item.kind !== "session-derived"), [items]);
+  const [selected, setSelected] = React.useState<Set<string>>(() => new Set(exportableItems.map((item) => item.id)));
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set(["tool:claude", "tool:codex"]));
 
   const supportsFilePicker = typeof window !== "undefined" && typeof (window as any).showSaveFilePicker === "function";
 
   const groups = React.useMemo(() => {
     const map = new Map<ToolName, Map<Category, InventoryItem[]>>();
-    for (const item of items) {
+    for (const item of exportableItems) {
       let toolMap = map.get(item.tool);
       if (!toolMap) {
         toolMap = new Map();
@@ -1080,7 +1095,7 @@ function ExportDialog({
             <p className="mt-1 text-[12px] text-muted-foreground">
               Pick a filename, optional save location, and the scope to include.{" "}
               <span className="font-mono tabular-nums text-foreground">{totalSelected}</span> of{" "}
-              <span className="font-mono tabular-nums">{items.length}</span> items selected.
+              <span className="font-mono tabular-nums">{exportableItems.length}</span> items selected.
             </p>
           </div>
           <button type="button" onClick={onCancel} className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Close">
@@ -1123,7 +1138,7 @@ function ExportDialog({
             <button
               type="button"
               className="rounded-md border border-border bg-card px-2 py-1 text-[11px] transition-colors press hover:bg-muted/60"
-              onClick={() => setSelected(new Set(items.map((item) => item.id)))}
+              onClick={() => setSelected(new Set(exportableItems.map((item) => item.id)))}
             >
               Select all
             </button>
@@ -1202,7 +1217,7 @@ function ExportDialog({
                                         {item.enabled ? "on" : "off"}
                                       </span>
                                       <span className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                                        {item.kind === "path" ? "path" : "config"}
+                                        {item.kind === "path" ? "path" : item.kind === "session-derived" ? "session" : "config"}
                                       </span>
                                     </label>
                                   );
@@ -1227,7 +1242,7 @@ function ExportDialog({
 
         <div className="flex items-center justify-between gap-2 border-t border-border/70 bg-muted/30 px-5 py-3">
           <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground">
-            {totalSelected} of {items.length} ready
+            {totalSelected} of {exportableItems.length} ready
           </span>
           <div className="flex items-center gap-2">
             <Button variant="outline" onClick={onCancel}>Cancel</Button>
@@ -1435,7 +1450,7 @@ function ImportDialog({
                                             <span className="min-w-0 flex-1 truncate">{item.name}</span>
                                             <span className="truncate font-mono text-[11px] text-muted-foreground">{item.archivePath}</span>
                                             <span className="rounded-sm bg-muted px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">
-                                              {item.kind === "path" ? "path" : "config"}
+                                              {item.kind === "path" ? "path" : item.kind === "session-derived" ? "session" : "config"}
                                             </span>
                                           </label>
                                         );

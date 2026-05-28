@@ -2,7 +2,7 @@ import { constants, promises as fs } from "node:fs";
 import path from "node:path";
 import os from "node:os";
 
-export type ItemCategory = "skills" | "mcp" | "hooks" | "rules" | "agents" | "plugins";
+export type ItemCategory = "skills" | "mcp" | "hooks" | "rules" | "agents" | "plugins" | "tools";
 export type ItemSource = "claude" | "codex";
 
 export type InventoryItem = {
@@ -72,7 +72,7 @@ export function decodeId(id: string): { source: ItemSource; category: ItemCatego
   if ((parsed.source !== "claude" && parsed.source !== "codex") || typeof parsed.activePath !== "string") {
     throw new Error("Invalid item id");
   }
-  if (!["skills", "mcp", "hooks", "rules", "agents", "plugins"].includes(String(parsed.category))) {
+  if (!["skills", "mcp", "hooks", "rules", "agents", "plugins", "tools"].includes(String(parsed.category))) {
     throw new Error("Invalid item category");
   }
   return parsed as { source: ItemSource; category: ItemCategory; activePath: string };

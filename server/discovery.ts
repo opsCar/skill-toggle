@@ -8,6 +8,9 @@ import type { Category, ConfigEntryMeta, ContextStats, InventoryItem, ItemDetail
 const home = os.homedir();
 const projectRoot = process.cwd();
 
+const TOOL_SCAN_LIMIT_PER_SOURCE = 8;
+const TOOL_INVOCATION_SAMPLE = 5;
+
 const toolHome: Record<ToolName, string> = {
   claude: path.join(home, ".claude"),
   codex: path.join(home, ".codex")
@@ -157,7 +160,8 @@ const pathSources: Record<ToolName, Record<Category, string[]>> = {
       path.join(projectRoot, ".claude", "rules")
     ],
     agents: [path.join(home, ".claude", "agents"), path.join(projectRoot, ".claude", "agents")],
-    plugins: [path.join(home, ".claude", "plugins"), path.join(projectRoot, ".claude", "plugins")]
+    plugins: [path.join(home, ".claude", "plugins"), path.join(projectRoot, ".claude", "plugins")],
+    tools: []
   },
   codex: {
     skills: [path.join(home, ".codex", "skills"), path.join(home, ".agents", "skills"), path.join(projectRoot, ".codex", "skills")],
@@ -171,7 +175,8 @@ const pathSources: Record<ToolName, Record<Category, string[]>> = {
       path.join(projectRoot, ".codex", "rules")
     ],
     agents: [path.join(home, ".codex", "agents"), path.join(home, ".agents"), path.join(projectRoot, ".codex", "agents")],
-    plugins: [path.join(home, ".codex", "plugins"), path.join(projectRoot, ".codex", "plugins")]
+    plugins: [path.join(home, ".codex", "plugins"), path.join(projectRoot, ".codex", "plugins")],
+    tools: []
   }
 };
 
@@ -299,9 +304,283 @@ export async function listInventory() {
   );
   const disabledPathItems = await Promise.all((["claude", "codex"] as const).map(collectDisabledPathItems));
   const configItems = await collectConfigItems();
+  const toolItems = await collectToolItems();
   const byId = new Map<string, InventoryItem>();
-  [...activePathItems.flat(), ...disabledPathItems.flat(), ...configItems].forEach((item) => byId.set(item.id, item));
+  [...activePathItems.flat(), ...disabledPathItems.flat(), ...configItems, ...toolItems].forEach((item) => byId.set(item.id, item));
   return [...byId.values()].sort((a, b) => `${a.tool}-${a.category}-${a.name}`.localeCompare(`${b.tool}-${b.category}-${b.name}`));
+}
+
+interface ToolInvocation {
+  timestamp?: string;
+  sessionId?: string;
+  evidence: string;
+  inputPreview?: string;
+}
+
+interface ToolAggregate {
+  tool: ToolName;
+  rawName: string;
+  displayName: string;
+  group: "core" | "subagent" | "mcp";
+  mcpServer?: string;
+  callCount: number;
+  uniqueSessions: Set<string>;
+  declaredInSessions: Set<string>;
+  invocations: ToolInvocation[];
+  firstSeen?: string;
+  lastSeen?: string;
+}
+
+async function collectToolItems(): Promise<InventoryItem[]> {
+  const aggregates = new Map<string, ToolAggregate>();
+  await Promise.all([
+    aggregateClaudeToolCalls(aggregates),
+    aggregateCodexToolCalls(aggregates)
+  ]);
+  return [...aggregates.values()].map((aggregate) => toolAggregateToItem(aggregate));
+}
+
+function toolAggregateToItem(aggregate: ToolAggregate): InventoryItem {
+  const groupLabel = aggregate.group === "mcp" ? `MCP \`${aggregate.mcpServer ?? "unknown"}\`` : aggregate.group;
+  const declaredCount = aggregate.declaredInSessions.size;
+  const description =
+    aggregate.callCount === 0
+      ? `${groupLabel} · loaded in ${declaredCount} session${declaredCount === 1 ? "" : "s"} but never called`
+      : `${groupLabel} · ${aggregate.callCount} call${aggregate.callCount === 1 ? "" : "s"} across ${aggregate.uniqueSessions.size} session${aggregate.uniqueSessions.size === 1 ? "" : "s"}`;
+  const invocationsText = aggregate.invocations
+    .slice(0, TOOL_INVOCATION_SAMPLE)
+    .map((entry, index) => {
+      const stamp = entry.timestamp ? new Date(entry.timestamp).toISOString() : "unknown time";
+      const preview = entry.inputPreview ? `\n    ${entry.inputPreview}` : "";
+      return `${index + 1}. ${stamp} · ${entry.evidence}${preview}`;
+    })
+    .join("\n");
+  const lastSeenLine = aggregate.lastSeen ? `\nLast call: ${aggregate.lastSeen}` : "";
+  const firstSeenLine = aggregate.firstSeen ? `\nFirst call: ${aggregate.firstSeen}` : "";
+  const stats =
+    aggregate.callCount === 0
+      ? `Loaded in ${declaredCount} session${declaredCount === 1 ? "" : "s"}, never called — dead weight in tool catalog`
+      : `${aggregate.callCount} call${aggregate.callCount === 1 ? "" : "s"} across ${aggregate.uniqueSessions.size} session${aggregate.uniqueSessions.size === 1 ? "" : "s"} (loaded in ${declaredCount})`;
+  const detailText = `Tool: ${aggregate.rawName}\nGroup: ${aggregate.group}${aggregate.mcpServer ? ` (server: ${aggregate.mcpServer})` : ""}\n${stats}${firstSeenLine}${lastSeenLine}\n\nRecent invocations:\n${invocationsText || "  (no calls captured)"}`;
+
+  return {
+    id: idFor(["tool", aggregate.tool, aggregate.rawName]),
+    tool: aggregate.tool,
+    category: "tools",
+    kind: "session-derived",
+    name: aggregate.displayName,
+    enabled: aggregate.callCount > 0,
+    source: aggregate.group === "mcp" ? `mcp:${aggregate.mcpServer ?? "unknown"}` : aggregate.group,
+    path: aggregate.rawName,
+    backupPath: undefined,
+    detailAvailable: true,
+    description,
+    valid: true,
+    context: contextForText(detailText)
+  };
+}
+
+async function aggregateClaudeToolCalls(aggregates: Map<string, ToolAggregate>) {
+  const root = path.join(home, ".claude", "projects");
+  const files = await latestSessionFiles(root, TOOL_SCAN_LIMIT_PER_SOURCE);
+  for (const file of files) {
+    const text = await safeRead(file);
+    if (!text) continue;
+    const sessionId = path.basename(file, ".jsonl");
+    const declared = new Set<string>();
+    for (const line of text.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      let record: any;
+      try {
+        record = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      const attachment = record?.attachment;
+      if (attachment?.type === "deferred_tools_delta") {
+        for (const name of asStringArray(attachment.addedNames)) declared.add(name);
+        for (const name of asStringArray(attachment.readdedNames)) declared.add(name);
+        for (const name of asStringArray(attachment.removedNames)) declared.delete(name);
+        continue;
+      }
+      const content = record?.message?.content;
+      if (!Array.isArray(content)) continue;
+      for (const part of content) {
+        if (part?.type !== "tool_use" || typeof part.name !== "string") continue;
+        recordToolCall(aggregates, "claude", part.name, {
+          timestamp: typeof record.timestamp === "string" ? record.timestamp : undefined,
+          sessionId,
+          evidence: `${path.basename(file)}`,
+          inputPreview: previewToolInput(part.input)
+        });
+      }
+    }
+    for (const name of declared) recordToolDeclaration(aggregates, "claude", name, sessionId);
+  }
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string") : [];
+}
+
+function recordToolDeclaration(aggregates: Map<string, ToolAggregate>, tool: ToolName, rawName: string, sessionId: string) {
+  const parsed = parseToolName(rawName);
+  const key = `${tool}:${parsed.rawName}`;
+  let aggregate = aggregates.get(key);
+  if (!aggregate) {
+    aggregate = {
+      tool,
+      rawName: parsed.rawName,
+      displayName: parsed.displayName,
+      group: parsed.group,
+      mcpServer: parsed.mcpServer,
+      callCount: 0,
+      uniqueSessions: new Set<string>(),
+      declaredInSessions: new Set<string>(),
+      invocations: []
+    };
+    aggregates.set(key, aggregate);
+  }
+  aggregate.declaredInSessions.add(sessionId);
+}
+
+async function aggregateCodexToolCalls(aggregates: Map<string, ToolAggregate>) {
+  const root = path.join(home, ".codex", "sessions");
+  const files = await latestSessionFiles(root, TOOL_SCAN_LIMIT_PER_SOURCE);
+  for (const file of files) {
+    const text = await safeRead(file);
+    if (!text) continue;
+    const sessionId = path.basename(file, ".jsonl");
+    for (const line of text.split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      let record: any;
+      try {
+        record = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (record?.type === "session_meta") {
+        const dynamicTools = (record.payload as any)?.dynamic_tools;
+        if (Array.isArray(dynamicTools)) {
+          for (const decl of dynamicTools) {
+            const name = typeof decl === "string" ? decl : typeof decl?.name === "string" ? decl.name : undefined;
+            if (name) recordToolDeclaration(aggregates, "codex", name, sessionId);
+          }
+        }
+        continue;
+      }
+      const payload = record?.payload;
+      if ((payload?.type !== "function_call" && payload?.type !== "custom_tool_call") || typeof payload.name !== "string") continue;
+      recordToolCall(aggregates, "codex", payload.name, {
+        timestamp: typeof payload.timestamp === "string" ? payload.timestamp : typeof record.timestamp === "string" ? record.timestamp : undefined,
+        sessionId,
+        evidence: `${path.basename(file)}`,
+        inputPreview: previewToolInput(payload.arguments ?? payload.input)
+      });
+    }
+  }
+}
+
+function recordToolCall(aggregates: Map<string, ToolAggregate>, tool: ToolName, rawName: string, invocation: ToolInvocation) {
+  const parsed = parseToolName(rawName);
+  const key = `${tool}:${parsed.rawName}`;
+  let aggregate = aggregates.get(key);
+  if (!aggregate) {
+    aggregate = {
+      tool,
+      rawName: parsed.rawName,
+      displayName: parsed.displayName,
+      group: parsed.group,
+      mcpServer: parsed.mcpServer,
+      callCount: 0,
+      uniqueSessions: new Set<string>(),
+      declaredInSessions: new Set<string>(),
+      invocations: []
+    };
+    aggregates.set(key, aggregate);
+  }
+  aggregate.callCount += 1;
+  if (invocation.sessionId) {
+    aggregate.uniqueSessions.add(invocation.sessionId);
+    aggregate.declaredInSessions.add(invocation.sessionId);
+  }
+  if (aggregate.invocations.length < TOOL_INVOCATION_SAMPLE * 2) aggregate.invocations.push(invocation);
+  if (invocation.timestamp) {
+    const t = invocation.timestamp;
+    if (!aggregate.firstSeen || t < aggregate.firstSeen) aggregate.firstSeen = t;
+    if (!aggregate.lastSeen || t > aggregate.lastSeen) aggregate.lastSeen = t;
+  }
+}
+
+export function parseToolName(name: string): { rawName: string; displayName: string; group: "core" | "subagent" | "mcp"; mcpServer?: string } {
+  if (name.startsWith("mcp__")) {
+    const segments = name.split("__");
+    const server = segments[1] ?? "unknown";
+    const rest = segments.slice(2).join("__");
+    return { rawName: name, displayName: rest ? `${server} · ${rest}` : server, group: "mcp", mcpServer: server };
+  }
+  if (name.toLowerCase().startsWith("subagent_") || name === "Task") {
+    return { rawName: name, displayName: name, group: "subagent" };
+  }
+  return { rawName: name, displayName: name, group: "core" };
+}
+
+function previewToolInput(input: unknown): string | undefined {
+  if (input == null) return undefined;
+  let serialized: string;
+  if (typeof input === "string") {
+    serialized = input;
+  } else {
+    try {
+      serialized = JSON.stringify(input);
+    } catch {
+      return undefined;
+    }
+  }
+  serialized = serialized.replace(/\s+/g, " ").trim();
+  if (serialized.length === 0) return undefined;
+  return serialized.length > 160 ? `${serialized.slice(0, 160)}…` : serialized;
+}
+
+async function latestSessionFiles(root: string, limit: number): Promise<string[]> {
+  let entries: string[];
+  try {
+    entries = await walkJsonl(root);
+  } catch {
+    return [];
+  }
+  if (entries.length === 0) return [];
+  const stats = await Promise.all(
+    entries.map(async (file) => {
+      try {
+        const stat = await fs.stat(file);
+        return { file, mtimeMs: stat.mtimeMs };
+      } catch {
+        return { file, mtimeMs: 0 };
+      }
+    })
+  );
+  return stats
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+    .slice(0, limit)
+    .map((row) => row.file);
+}
+
+async function walkJsonl(root: string, depth = 6): Promise<string[]> {
+  if (depth < 0) return [];
+  let entries;
+  try {
+    entries = await fs.readdir(root, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  for (const entry of entries) {
+    const target = path.join(root, entry.name);
+    if (entry.isDirectory()) out.push(...(await walkJsonl(target, depth - 1)));
+    else if (entry.isFile() && entry.name.endsWith(".jsonl")) out.push(target);
+  }
+  return out;
 }
 
 async function describePath(target: string) {
@@ -352,6 +631,9 @@ function emptyContextStats(): ContextStats {
 export async function getDetail(id: string): Promise<ItemDetail | undefined> {
   const item = (await listInventory()).find((row) => row.id === id);
   if (!item) return undefined;
+  if (item.kind === "session-derived") {
+    return { ...item, detail: await describeSessionDerived(item), detailType: "markdown" };
+  }
   if (item.kind === "config-entry") {
     const detail = item.enabled
       ? JSON.stringify(getAt(await readConfig(item.path!, item.path!.endsWith(".toml") ? "toml" : "json"), item.description.split(" in ")[0].split(".")), null, 2)
@@ -363,9 +645,57 @@ export async function getDetail(id: string): Promise<ItemDetail | undefined> {
   return { ...item, ...detail };
 }
 
+async function describeSessionDerived(item: InventoryItem): Promise<string> {
+  const aggregates = new Map<string, ToolAggregate>();
+  if (item.tool === "claude") await aggregateClaudeToolCalls(aggregates);
+  else await aggregateCodexToolCalls(aggregates);
+  const entry = [...aggregates.values()].find((row) => idFor(["tool", row.tool, row.rawName]) === item.id);
+  if (!entry) {
+    return `# ${item.name}\n\nNo session evidence is available for this tool right now. The list reflects the most recent ${TOOL_SCAN_LIMIT_PER_SOURCE} sessions per provider.`;
+  }
+  const header = [
+    `# ${entry.displayName}`,
+    "",
+    `- Raw name: \`${entry.rawName}\``,
+    `- Group: ${entry.group}${entry.mcpServer ? ` (server \`${entry.mcpServer}\`)` : ""}`,
+    `- Provider: ${entry.tool}`,
+    `- Loaded in: ${entry.declaredInSessions.size} session${entry.declaredInSessions.size === 1 ? "" : "s"} (scanned)`,
+    `- Calls observed: ${entry.callCount}`,
+    `- Sessions where called: ${entry.uniqueSessions.size}`,
+    entry.firstSeen ? `- First call: ${entry.firstSeen}` : "",
+    entry.lastSeen ? `- Last call: ${entry.lastSeen}` : ""
+  ]
+    .filter(Boolean)
+    .join("\n");
+  const linkHint =
+    entry.group === "mcp" && entry.mcpServer
+      ? `\n\n> This tool is provided by the MCP server **${entry.mcpServer}**. To take it (and its sibling tools) out of context, disable that server from the MCP category.`
+      : entry.group === "core"
+        ? "\n\n> Built-in tool. To restrict it, edit `permissions.deny` in the relevant `settings.json`."
+        : "";
+  const recent = entry.invocations.slice(0, TOOL_INVOCATION_SAMPLE * 2);
+  const invocationsBlock = recent.length
+    ? recent
+        .map((invocation, index) => {
+          const stamp = invocation.timestamp ?? "(no timestamp)";
+          const session = invocation.sessionId ? ` · session \`${invocation.sessionId.slice(0, 8)}\`` : "";
+          const preview = invocation.inputPreview ? `\n     \`${invocation.inputPreview.replace(/`/g, "ʼ")}\`` : "";
+          return `${index + 1}. ${stamp}${session} (${invocation.evidence})${preview}`;
+        })
+        .join("\n")
+    : "_No call samples captured._";
+  return `${header}${linkHint}\n\n## Recent invocations\n\n${invocationsBlock}\n`;
+}
+
 export async function toggleItem(id: string, enabled: boolean) {
   const item = (await listInventory()).find((row) => row.id === id);
   if (!item) throw new Error("Item not found");
+  if (item.kind === "session-derived") {
+    const error = item.source.startsWith("mcp:")
+      ? Object.assign(new Error(`This tool is provided by MCP server "${item.source.slice(4)}". Disable that server from the MCP category to remove all of its tools.`), { statusCode: 409 })
+      : Object.assign(new Error("Built-in tools are diagnostic-only here. Edit settings.json permissions to restrict them."), { statusCode: 409 });
+    throw error;
+  }
   if (item.enabled === enabled) return item;
 
   if (item.kind === "path") {
