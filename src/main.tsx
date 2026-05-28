@@ -179,6 +179,9 @@ function App() {
   const [category, setCategory] = React.useState<Category | "all">("all");
   const [tool, setTool] = React.useState<ToolName | "all">("all");
   const [query, setQuery] = React.useState("");
+  const [selectedListIds, setSelectedListIds] = React.useState<Set<string>>(new Set());
+  const [usageOperator, setUsageOperator] = React.useState<"lt" | "eq" | "gt">("eq");
+  const [usageValue, setUsageValue] = React.useState("");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [status, setStatus] = React.useState("");
@@ -421,12 +424,78 @@ function App() {
     }
   }
 
+  const usageNumber = usageValue.trim() === "" ? null : Number(usageValue);
+  const hasUsageFilter = usageNumber !== null && Number.isFinite(usageNumber);
   const filtered = items.filter((item) => {
     const matchesCategory = category === "all" || item.category === category;
     const matchesTool = tool === "all" || item.tool === tool;
     const haystack = `${item.name} ${item.description} ${item.source}`.toLowerCase();
-    return matchesCategory && matchesTool && haystack.includes(query.toLowerCase());
+    const usageTotal = usageById[item.id]?.total ?? 0;
+    const matchesUsage =
+      !hasUsageFilter ||
+      (usageOperator === "lt" && usageTotal < usageNumber!) ||
+      (usageOperator === "eq" && usageTotal === usageNumber!) ||
+      (usageOperator === "gt" && usageTotal > usageNumber!);
+    return matchesCategory && matchesTool && matchesUsage && haystack.includes(query.toLowerCase());
   });
+  const selectedVisibleState = selectedState(filtered, selectedListIds);
+  const selectedVisibleCount = filtered.filter((item) => selectedListIds.has(item.id)).length;
+  const selectedListItems = items.filter((item) => selectedListIds.has(item.id));
+  const selectedToggleableItems = selectedListItems.filter((item) => item.kind !== "session-derived");
+  const selectedBatchEnabled = selectedToggleableItems.some((item) => item.enabled);
+
+  function setListSelection(ids: string[], wanted: boolean) {
+    setSelectedListIds((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (wanted) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }
+
+  async function toggleSelectedItems(enabled: boolean) {
+    const targets = selectedToggleableItems.filter((item) => item.enabled !== enabled);
+    if (targets.length === 0) {
+      const skipped = selectedListItems.length - selectedToggleableItems.length;
+      setStatus(skipped > 0 ? `No selected toggleable items needed changes. Skipped ${skipped} inspect-only item${skipped === 1 ? "" : "s"}.` : "No selected items needed changes.");
+      return;
+    }
+
+    setBusy(true);
+    setError("");
+    setStatus(`${enabled ? "Enabling" : "Disabling"} ${targets.length} selected item${targets.length === 1 ? "" : "s"}...`);
+    try {
+      for (const item of targets) {
+        const response = await fetch(`/api/items/${item.id}/toggle`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? `Failed to toggle ${item.name}`);
+      }
+      const skipped = selectedListItems.length - selectedToggleableItems.length;
+      setStatus(
+        `${enabled ? "Enabled" : "Disabled"} ${targets.length} selected item${targets.length === 1 ? "" : "s"}${
+          skipped > 0 ? `; skipped ${skipped} inspect-only item${skipped === 1 ? "" : "s"}` : ""
+        }.`
+      );
+      await loadItems();
+      if (selected) await loadDetail(selected.id).catch(() => undefined);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Batch toggle failed");
+      setStatus("");
+      await loadItems();
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function clearUsageFilter() {
+    setUsageValue("");
+  }
 
   const itemsForTool = tool === "all" ? items : items.filter((item) => item.tool === tool);
 
@@ -602,27 +671,68 @@ function App() {
         </aside>
 
         <section className="min-w-0">
-          <label className="mb-3 flex h-10 items-center gap-2 rounded-md border border-border bg-card px-3 transition-colors focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-ring/20">
-            <Search className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
-            <input
-              aria-label="Search inventory"
-              className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/60"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search name, path, or source…"
-            />
-            {query ? (
-              <button
-                type="button"
-                onClick={() => setQuery("")}
-                className="rounded p-0.5 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
-                aria-label="Clear search"
-              >
-                <X className="size-3" strokeWidth={2} />
-              </button>
-            ) : null}
-            <span className="font-mono text-[10px] tabular-nums text-muted-foreground/70">{filtered.length}</span>
-          </label>
+          <div className="mb-3 grid gap-2">
+            <label className="flex h-10 items-center gap-2 rounded-md border border-border bg-card px-3 transition-colors focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-ring/20">
+              <Search className="size-3.5 text-muted-foreground" strokeWidth={1.75} />
+              <input
+                aria-label="Search inventory"
+                className="min-w-0 flex-1 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/60"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search name, path, or source…"
+              />
+              {query ? (
+                <button
+                  type="button"
+                  onClick={() => setQuery("")}
+                  className="rounded p-0.5 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
+                  aria-label="Clear search"
+                >
+                  <X className="size-3" strokeWidth={2} />
+                </button>
+              ) : null}
+              <span className="font-mono text-[10px] tabular-nums text-muted-foreground/70">{filtered.length}</span>
+            </label>
+            <div className="grid gap-2 sm:grid-cols-[auto_1fr]">
+              <div className="flex h-9 items-center gap-1 rounded-md border border-border bg-card p-1 card-edge">
+                {(["lt", "eq", "gt"] as const).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setUsageOperator(key)}
+                    className={`flex h-7 min-w-7 items-center justify-center rounded-[5px] px-2 font-mono text-[12px] transition-colors press ${
+                      usageOperator === key ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                    }`}
+                    aria-label={key === "lt" ? "Usage less than" : key === "eq" ? "Usage equal to" : "Usage greater than"}
+                  >
+                    {key === "lt" ? "<" : key === "eq" ? "=" : ">"}
+                  </button>
+                ))}
+              </div>
+              <label className="flex h-9 min-w-0 items-center gap-2 rounded-md border border-border bg-card px-3 transition-colors focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-ring/20">
+                <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Usage</span>
+                <input
+                  aria-label="Usage filter number"
+                  className="min-w-0 flex-1 bg-transparent font-mono text-[12.5px] outline-none placeholder:text-muted-foreground/60"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={usageValue}
+                  onChange={(event) => setUsageValue(event.target.value)}
+                  placeholder="number"
+                />
+                {usageValue ? (
+                  <button
+                    type="button"
+                    onClick={clearUsageFilter}
+                    className="rounded p-0.5 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
+                    aria-label="Clear usage filter"
+                  >
+                    <X className="size-3" strokeWidth={2} />
+                  </button>
+                ) : null}
+              </label>
+            </div>
+          </div>
           {error ? <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">{error}</div> : null}
           <ScrollArea className="h-[calc(100dvh-186px)]">
             <div className="overflow-hidden rounded-md border border-border bg-card card-edge">
@@ -644,81 +754,120 @@ function App() {
                   <div className="mt-1 text-[12px] text-muted-foreground">Try a different search or clear your filters.</div>
                 </div>
               ) : (
-                <ul className="divide-y divide-border/70">
-                  {filtered.map((item, index) => {
-                    const isActive = selected?.id === item.id;
-                    const usage = usageById[item.id];
-                    const invalid = item.category === "skills" && !item.valid;
-                    return (
-                      <li
-                        key={item.id}
-                        className="row-mount"
-                        style={{ ["--index" as any]: index < 24 ? index : 0 }}
+                <>
+                  <div className="flex items-center justify-between gap-2 border-b border-border/70 bg-muted/25 px-3.5 py-2">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <label className="flex min-w-0 items-center gap-2 text-[12px] text-muted-foreground">
+                        <TriCheckbox
+                          state={selectedVisibleState}
+                          onChange={(checked) => setListSelection(filtered.map((item) => item.id), checked)}
+                        />
+                        <span className="truncate">Select all visible</span>
+                      </label>
+                      <label
+                        className={`flex shrink-0 items-center gap-1.5 border-l border-border/70 pl-3 text-[11px] ${
+                          selectedToggleableItems.length === 0 ? "text-muted-foreground/50" : "text-muted-foreground"
+                        }`}
                       >
-                        <button
-                          type="button"
-                          className={`group relative flex w-full items-start px-3.5 py-3 text-left transition-colors press ${
-                            isActive ? "bg-muted/60" : "hover:bg-muted/40"
-                          }`}
-                          onClick={() => void loadDetail(item.id)}
+                        <span className="font-mono uppercase tracking-[0.12em]">{selectedBatchEnabled ? "On" : "Off"}</span>
+                        <Switch
+                          checked={selectedBatchEnabled}
+                          disabled={busy || selectedToggleableItems.length === 0}
+                          onCheckedChange={(checked) => void toggleSelectedItems(checked)}
+                        />
+                      </label>
+                    </div>
+                    <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                      {selectedVisibleCount}/{filtered.length} selected
+                    </span>
+                  </div>
+                  <ul className="divide-y divide-border/70">
+                    {filtered.map((item, index) => {
+                      const isActive = selected?.id === item.id;
+                      const isChecked = selectedListIds.has(item.id);
+                      const usage = usageById[item.id];
+                      const invalid = item.category === "skills" && !item.valid;
+                      return (
+                        <li
+                          key={item.id}
+                          className="row-mount"
+                          style={{ ["--index" as any]: index < 24 ? index : 0 }}
                         >
-                          <span
-                            aria-hidden
-                            className={`absolute left-0 top-0 bottom-0 w-[3px] transition-colors ${
-                              isActive ? "bg-primary" : item.enabled ? "bg-primary/40" : "bg-transparent"
+                          <div
+                            className={`group relative flex w-full items-start gap-2 px-3.5 py-3 text-left transition-colors ${
+                              isActive ? "bg-muted/60" : "hover:bg-muted/40"
                             }`}
-                          />
-                          <span
-                            className={`mt-1 flex size-3 shrink-0 items-center justify-center ${item.enabled ? "text-primary" : "text-muted-foreground/40"}`}
-                            title={item.enabled ? "Enabled" : "Disabled"}
                           >
-                            {item.enabled ? (
-                              <span className="block size-2 rounded-full bg-current shadow-[0_0_0_3px_currentColor]/[.12]" />
-                            ) : (
-                              <Circle className="size-2.5" strokeWidth={1.5} />
-                            )}
-                          </span>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5">
-                              <span className={`truncate text-[13px] font-medium tracking-tightish ${isActive ? "text-foreground" : "text-foreground/90"}`}>
-                                {item.name}
+                            <span
+                              aria-hidden
+                              className={`absolute left-0 top-0 bottom-0 w-[3px] transition-colors ${
+                                isActive ? "bg-primary" : item.enabled ? "bg-primary/40" : "bg-transparent"
+                              }`}
+                            />
+                            <div className="mt-0.5 shrink-0 pt-0.5">
+                              <TriCheckbox
+                                state={isChecked ? "all" : "none"}
+                                onChange={(checked) => setListSelection([item.id], checked)}
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              className="flex min-w-0 flex-1 items-start gap-2 text-left press"
+                              onClick={() => void loadDetail(item.id)}
+                            >
+                              <span
+                                className={`mt-1 flex size-3 shrink-0 items-center justify-center ${item.enabled ? "text-primary" : "text-muted-foreground/40"}`}
+                                title={item.enabled ? "Enabled" : "Disabled"}
+                              >
+                                {item.enabled ? (
+                                  <span className="block size-2 rounded-full bg-current shadow-[0_0_0_3px_currentColor]/[.12]" />
+                                ) : (
+                                  <Circle className="size-2.5" strokeWidth={1.5} />
+                                )}
                               </span>
-                              {invalid ? (
-                                <span className="shrink-0 rounded-sm bg-destructive/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-destructive">
-                                  invalid
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="mt-1 truncate text-[11.5px] text-muted-foreground">
-                              {invalid ? item.invalidReason ?? "Skill is invalid" : item.description}
-                            </div>
-                            <div className="mt-1.5 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/80">
-                              <span>{item.tool === "claude" ? "Claude" : "Codex"}</span>
-                              <span className="text-muted-foreground/40">·</span>
-                              <span>{item.category}</span>
-                              <span className="text-muted-foreground/40">·</span>
-                              <span>{formatNumber(usage?.total ?? 0)} uses</span>
-                              <span className="text-muted-foreground/40">·</span>
-                              <span>{formatNumber(item.context.estimatedTokens)} tok</span>
-                              {usage?.lastUsed ? (
-                                <>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className={`truncate text-[13px] font-medium tracking-tightish ${isActive ? "text-foreground" : "text-foreground/90"}`}>
+                                    {item.name}
+                                  </span>
+                                  {invalid ? (
+                                    <span className="shrink-0 rounded-sm bg-destructive/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-destructive">
+                                      invalid
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="mt-1 truncate text-[11.5px] text-muted-foreground">
+                                  {invalid ? item.invalidReason ?? "Skill is invalid" : item.description}
+                                </div>
+                                <div className="mt-1.5 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/80">
+                                  <span>{item.tool === "claude" ? "Claude" : "Codex"}</span>
                                   <span className="text-muted-foreground/40">·</span>
-                                  <span>{formatDate(usage.lastUsed)}</span>
-                                </>
-                              ) : null}
-                            </div>
+                                  <span>{item.category}</span>
+                                  <span className="text-muted-foreground/40">·</span>
+                                  <span>{formatNumber(usage?.total ?? 0)} uses</span>
+                                  <span className="text-muted-foreground/40">·</span>
+                                  <span>{formatNumber(item.context.estimatedTokens)} tok</span>
+                                  {usage?.lastUsed ? (
+                                    <>
+                                      <span className="text-muted-foreground/40">·</span>
+                                      <span>{formatDate(usage.lastUsed)}</span>
+                                    </>
+                                  ) : null}
+                                </div>
+                              </div>
+                              <ChevronRight
+                                className={`mt-1 size-3.5 shrink-0 transition-all ${
+                                  isActive ? "translate-x-0 text-foreground" : "-translate-x-1 text-muted-foreground/0 group-hover:translate-x-0 group-hover:text-muted-foreground"
+                                }`}
+                                strokeWidth={1.75}
+                              />
+                            </button>
                           </div>
-                          <ChevronRight
-                            className={`mt-1 size-3.5 shrink-0 transition-all ${
-                              isActive ? "translate-x-0 text-foreground" : "-translate-x-1 text-muted-foreground/0 group-hover:translate-x-0 group-hover:text-muted-foreground"
-                            }`}
-                            strokeWidth={1.75}
-                          />
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </>
               )}
             </div>
           </ScrollArea>

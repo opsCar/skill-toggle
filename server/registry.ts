@@ -30,7 +30,7 @@ export async function listItems(roots = defaultRoots()): Promise<RegistryItem[]>
     deduped.set(item.id, item);
   }
 
-  return [...deduped.values()].toSorted((a, b) =>
+  return [...deduped.values()].sort((a, b) =>
     [a.category, a.provider, a.scope, a.name].join(":").localeCompare([b.category, b.provider, b.scope, b.name].join(":"))
   );
 }
@@ -151,6 +151,24 @@ async function scanRules(roots: RegistryRoots): Promise<RegistryItem[]> {
         })
       );
 
+      const rootRuleItems = candidate.provider === "claude" && candidate.scope === "project"
+        ? await Promise.all(
+            [path.join(roots.projectRoot, ".mcp.json")].map(async (originalPath) => {
+              if (!(await exists(originalPath))) return undefined;
+              return makeFileItem({
+                provider: "claude",
+                category: "rule",
+                scope: "project",
+                name: ".mcp.json",
+                originalPath,
+                roots,
+                description: "Claude project MCP config file",
+                detailPath: originalPath
+              });
+            })
+          )
+        : [];
+
       const commandRoot = path.join(candidate.root, "commands");
       const commandFiles = await walkMarkdown(commandRoot);
       const commandItems = commandFiles.map((file) =>
@@ -166,25 +184,36 @@ async function scanRules(roots: RegistryRoots): Promise<RegistryItem[]> {
         })
       );
 
-      return [...namedItems.filter((item): item is RegistryItem => item !== undefined), ...commandItems];
+      return [...namedItems.filter((item): item is RegistryItem => item !== undefined), ...rootRuleItems.filter((item): item is RegistryItem => item !== undefined), ...commandItems];
     })
   );
   return groups.flat();
 }
 
 async function scanClaudeSettings(roots: RegistryRoots): Promise<RegistryItem[]> {
+  const configFiles: Array<{ scope: Scope; path: string }> = [
+    { scope: "home", path: path.join(roots.homeDir, ".claude.json") },
+    { scope: "home", path: path.join(roots.homeDir, ".claude", "settings.json") },
+    { scope: "home", path: path.join(roots.homeDir, ".config", "claude", "settings.json") },
+    { scope: "project", path: path.join(roots.projectRoot, ".mcp.json") },
+    { scope: "project", path: path.join(roots.projectRoot, ".claude", "settings.json") }
+  ];
+
   const groups = await Promise.all(
-    (["project", "home"] as const).map(async (scope) => {
-      const settingsPath = path.join(scopeRoot("claude", scope, roots), "settings.json");
-      const settings = await readJson(settingsPath);
+    configFiles.map(async (config) => {
+      const settings = await readJson(config.path);
       if (!settings) return [];
       const mcpItems = Object.entries(objectRecord(settings.mcpServers ?? settings.mcp_servers)).map(([name, value]) =>
-        makeConfigItem("claude", "mcp", scope, name, settingsPath, value, roots)
+        makeConfigItem("claude", "mcp", config.scope, name, config.path, value, roots)
+      );
+      const currentProject = objectRecord(objectRecord(settings.projects)[roots.projectRoot]);
+      const projectMcpItems = Object.entries(objectRecord(currentProject.mcpServers)).map(([name, value]) =>
+        makeConfigItem("claude", "mcp", "project", name, config.path, value, roots, `projects.${roots.projectRoot}.mcpServers.${name}`)
       );
       const hookItems = Object.entries(objectRecord(settings.hooks)).map(([name, value]) =>
-        makeConfigItem("claude", "hook", scope, name, settingsPath, value, roots)
+        makeConfigItem("claude", "hook", config.scope, name, config.path, value, roots)
       );
-      return [...mcpItems, ...hookItems];
+      return [...mcpItems, ...projectMcpItems, ...hookItems];
     })
   );
   return groups.flat();
@@ -371,11 +400,12 @@ function makeConfigItem(
   name: string,
   configPath: string,
   value: unknown,
-  roots: RegistryRoots
+  roots: RegistryRoots,
+  stableKey = name
 ): RegistryItem {
   const detailPreview = JSON.stringify(value, null, 2);
   return {
-    id: makeId(provider, category, scope, name, `${configPath}#${category}:${name}`, "enabled"),
+    id: makeId(provider, category, scope, name, `${configPath}#${category}:${stableKey}`, "enabled"),
     provider,
     category,
     scope,

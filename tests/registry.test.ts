@@ -33,6 +33,12 @@ describe("registry", () => {
       path.join(roots.homeDir, ".claude", "settings.json"),
       JSON.stringify({ mcpServers: { jira: { command: "jira" } }, hooks: { Stop: [{ command: "echo done" }] } }, null, 2)
     );
+    await fs.writeFile(
+      path.join(roots.homeDir, ".claude.json"),
+      JSON.stringify({ mcpServers: { "chrome-devtools": { command: "npx", args: ["chrome-devtools-mcp@latest"] } } }, null, 2)
+    );
+    await fs.mkdir(roots.projectRoot, { recursive: true });
+    await fs.writeFile(path.join(roots.projectRoot, ".mcp.json"), JSON.stringify({ mcpServers: { context7: { url: "https://mcp.context7.com/mcp" } } }, null, 2));
     await fs.mkdir(path.join(roots.homeDir, ".codex"), { recursive: true });
     await fs.writeFile(path.join(roots.homeDir, ".codex", "AGENTS.md"), "# Rules\nUse local project instructions.");
     await fs.mkdir(path.join(roots.projectRoot, ".codex", "agents", "reviewer"), { recursive: true });
@@ -46,8 +52,11 @@ describe("registry", () => {
     expect(items.some((item) => item.category === "agent" && item.name === "reviewer")).toBe(true);
     expect(items.some((item) => item.category === "plugin" && item.name === "browser")).toBe(true);
     expect(items.some((item) => item.category === "mcp" && item.name === "jira")).toBe(true);
+    expect(items.some((item) => item.category === "mcp" && item.name === "chrome-devtools" && item.path === path.join(roots.homeDir, ".claude.json"))).toBe(true);
+    expect(items.some((item) => item.category === "mcp" && item.name === "context7" && item.path === path.join(roots.projectRoot, ".mcp.json"))).toBe(true);
     expect(items.some((item) => item.category === "hook" && item.name === "Stop")).toBe(true);
     expect(items.some((item) => item.category === "rule" && item.name === "AGENTS.md")).toBe(true);
+    expect(items.some((item) => item.category === "rule" && item.name === ".mcp.json")).toBe(true);
   });
 
   it("loads detail content for a selected item", async () => {

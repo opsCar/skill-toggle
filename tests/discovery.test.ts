@@ -100,3 +100,50 @@ test("lists and toggles MCP config entries", async () => {
   await toggleItem(item!.id, true);
   expect(await fs.readFile(configPath, "utf8")).toContain("demo");
 });
+
+test("lists Claude MCP entries from global state and project .mcp.json", async () => {
+  const oldCwd = process.cwd();
+  const projectDir = path.join(tmp, "project");
+  await fs.mkdir(projectDir, { recursive: true });
+  process.chdir(projectDir);
+  const activeProjectRoot = process.cwd();
+
+  const globalStatePath = path.join(tmp, ".claude.json");
+  await fs.writeFile(
+    globalStatePath,
+    JSON.stringify(
+      {
+        mcpServers: {
+          "chrome-devtools": {
+            type: "stdio",
+            command: "npx",
+            args: ["chrome-devtools-mcp@latest"]
+          }
+        },
+        projects: {
+          [activeProjectRoot]: {
+            mcpServers: {
+              localdb: { command: "localdb-mcp" }
+            }
+          }
+        }
+      },
+      null,
+      2
+    )
+  );
+
+  const projectMcpPath = path.join(activeProjectRoot, ".mcp.json");
+  await fs.writeFile(projectMcpPath, JSON.stringify({ mcpServers: { context7: { url: "https://mcp.context7.com/mcp" } } }, null, 2));
+
+  try {
+    const { listInventory } = await import("../server/discovery");
+    const items = await listInventory();
+
+    expect(items.some((row) => row.tool === "claude" && row.category === "mcp" && row.name === "chrome-devtools" && row.path === globalStatePath)).toBe(true);
+    expect(items.some((row) => row.tool === "claude" && row.category === "mcp" && row.name === "localdb" && row.path === globalStatePath)).toBe(true);
+    expect(items.some((row) => row.tool === "claude" && row.category === "mcp" && row.name === "context7" && row.path === projectMcpPath)).toBe(true);
+  } finally {
+    process.chdir(oldCwd);
+  }
+});

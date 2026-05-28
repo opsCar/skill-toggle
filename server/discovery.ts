@@ -7,13 +7,15 @@ import type { Category, ConfigEntryMeta, ContextStats, InventoryItem, ItemDetail
 
 const home = os.homedir();
 const projectRoot = process.cwd();
+const claudeConfigRoot = process.env.CLAUDE_CONFIG_DIR ?? path.join(home, ".claude");
+const codexConfigRoot = process.env.CODEX_HOME ?? path.join(home, ".codex");
 
 const TOOL_SCAN_LIMIT_PER_SOURCE = 8;
 const TOOL_INVOCATION_SAMPLE = 5;
 
 const toolHome: Record<ToolName, string> = {
-  claude: path.join(home, ".claude"),
-  codex: path.join(home, ".codex")
+  claude: claudeConfigRoot,
+  codex: codexConfigRoot
 };
 
 const backupHome: Record<ToolName, string> = {
@@ -148,34 +150,34 @@ function configItem(
 
 const pathSources: Record<ToolName, Record<Category, string[]>> = {
   claude: {
-    skills: [path.join(home, ".claude", "skills"), path.join(home, ".claude", ".cursor", "skills"), path.join(projectRoot, ".claude", "skills")],
-    mcp: [path.join(home, ".claude", "mcp"), path.join(projectRoot, ".claude", "mcp")],
-    hooks: [path.join(home, ".claude", "hooks"), path.join(home, ".claude", ".cursor", "hooks"), path.join(projectRoot, ".claude", "hooks")],
+    skills: [path.join(claudeConfigRoot, "skills"), path.join(claudeConfigRoot, ".cursor", "skills"), path.join(projectRoot, ".claude", "skills")],
+    mcp: [path.join(claudeConfigRoot, "mcp"), path.join(projectRoot, ".claude", "mcp")],
+    hooks: [path.join(claudeConfigRoot, "hooks"), path.join(claudeConfigRoot, ".cursor", "hooks"), path.join(projectRoot, ".claude", "hooks")],
     rules: [
-      path.join(home, ".claude", "rules"),
-      path.join(home, ".claude", ".cursor", "rules"),
-      path.join(home, ".claude", "CLAUDE.md"),
+      path.join(claudeConfigRoot, "rules"),
+      path.join(claudeConfigRoot, ".cursor", "rules"),
+      path.join(claudeConfigRoot, "CLAUDE.md"),
       path.join(projectRoot, "CLAUDE.md"),
       path.join(projectRoot, ".claude", "CLAUDE.md"),
       path.join(projectRoot, ".claude", "rules")
     ],
-    agents: [path.join(home, ".claude", "agents"), path.join(projectRoot, ".claude", "agents")],
-    plugins: [path.join(home, ".claude", "plugins"), path.join(projectRoot, ".claude", "plugins")],
+    agents: [path.join(claudeConfigRoot, "agents"), path.join(projectRoot, ".claude", "agents")],
+    plugins: [path.join(claudeConfigRoot, "plugins"), path.join(projectRoot, ".claude", "plugins")],
     tools: []
   },
   codex: {
-    skills: [path.join(home, ".codex", "skills"), path.join(home, ".agents", "skills"), path.join(projectRoot, ".codex", "skills")],
-    mcp: [path.join(home, ".codex", "mcp"), path.join(projectRoot, ".codex", "mcp")],
-    hooks: [path.join(home, ".codex", "hooks"), path.join(projectRoot, ".codex", "hooks")],
+    skills: [path.join(codexConfigRoot, "skills"), path.join(home, ".agents", "skills"), path.join(projectRoot, ".codex", "skills")],
+    mcp: [path.join(codexConfigRoot, "mcp"), path.join(projectRoot, ".codex", "mcp")],
+    hooks: [path.join(codexConfigRoot, "hooks"), path.join(projectRoot, ".codex", "hooks")],
     rules: [
-      path.join(home, ".codex", "rules"),
-      path.join(home, ".codex", "AGENTS.md"),
+      path.join(codexConfigRoot, "rules"),
+      path.join(codexConfigRoot, "AGENTS.md"),
       path.join(projectRoot, "AGENTS.md"),
       path.join(projectRoot, ".codex", "AGENTS.md"),
       path.join(projectRoot, ".codex", "rules")
     ],
-    agents: [path.join(home, ".codex", "agents"), path.join(home, ".agents"), path.join(projectRoot, ".codex", "agents")],
-    plugins: [path.join(home, ".codex", "plugins"), path.join(projectRoot, ".codex", "plugins")],
+    agents: [path.join(codexConfigRoot, "agents"), path.join(home, ".agents"), path.join(projectRoot, ".codex", "agents")],
+    plugins: [path.join(codexConfigRoot, "plugins"), path.join(projectRoot, ".codex", "plugins")],
     tools: []
   }
 };
@@ -218,10 +220,14 @@ async function collectDisabledPathItems(tool: ToolName) {
 }
 
 const configSources = [
-  { tool: "claude" as const, path: path.join(home, ".claude", "settings.json"), format: "json" as const },
+  { tool: "claude" as const, path: path.join(home, ".claude.json"), format: "json" as const },
+  { tool: "claude" as const, path: path.join(projectRoot, ".mcp.json"), format: "json" as const },
+  { tool: "claude" as const, path: "/Library/Application Support/ClaudeCode/managed-mcp.json", format: "json" as const },
+  { tool: "claude" as const, path: path.join(claudeConfigRoot, "settings.json"), format: "json" as const },
+  { tool: "claude" as const, path: path.join(home, ".config", "claude", "settings.json"), format: "json" as const },
   { tool: "claude" as const, path: path.join(projectRoot, ".claude", "settings.json"), format: "json" as const },
-  { tool: "claude" as const, path: path.join(home, ".claude", ".cursor", "hooks.json"), format: "json" as const },
-  { tool: "codex" as const, path: path.join(home, ".codex", "config.toml"), format: "toml" as const },
+  { tool: "claude" as const, path: path.join(claudeConfigRoot, ".cursor", "hooks.json"), format: "json" as const },
+  { tool: "codex" as const, path: path.join(codexConfigRoot, "config.toml"), format: "toml" as const },
   { tool: "codex" as const, path: path.join(projectRoot, ".codex", "config.toml"), format: "toml" as const }
 ];
 
@@ -267,6 +273,11 @@ function configuredEntries(tool: ToolName, configPath: string, data: any) {
   const mcpRoot = tool === "codex" ? data.mcp_servers : data.mcpServers;
   if (mcpRoot && typeof mcpRoot === "object") {
     for (const key of Object.keys(mcpRoot)) entries.push({ category: "mcp", keyPath: [tool === "codex" ? "mcp_servers" : "mcpServers", key], value: mcpRoot[key] });
+  }
+  const currentProject = tool === "claude" && data.projects && typeof data.projects === "object" ? data.projects[projectRoot] : undefined;
+  const projectMcpRoot = currentProject && typeof currentProject === "object" ? currentProject.mcpServers : undefined;
+  if (projectMcpRoot && typeof projectMcpRoot === "object") {
+    for (const key of Object.keys(projectMcpRoot)) entries.push({ category: "mcp", keyPath: ["projects", projectRoot, "mcpServers", key], value: projectMcpRoot[key] });
   }
   const hooksRoot = data.hooks;
   if (hooksRoot && typeof hooksRoot === "object") {
