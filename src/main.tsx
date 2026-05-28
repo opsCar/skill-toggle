@@ -173,6 +173,9 @@ const categories: Array<{ key: Category | "all"; label: string; icon: React.Elem
   { key: "plugins", label: "Plugins", icon: Plug }
 ];
 
+const INVENTORY_ROW_HEIGHT = 86;
+const INVENTORY_OVERSCAN = 8;
+
 function App() {
   const [items, setItems] = React.useState<InventoryItem[]>([]);
   const [selected, setSelected] = React.useState<ItemDetail | null>(null);
@@ -196,6 +199,9 @@ function App() {
   const [importFile, setImportFile] = React.useState<File | null>(null);
   const [importInspection, setImportInspection] = React.useState<ImportInspection | null>(null);
   const importInputRef = React.useRef<HTMLInputElement>(null);
+  const inventoryViewportRef = React.useRef<HTMLDivElement>(null);
+  const [inventoryScrollTop, setInventoryScrollTop] = React.useState(0);
+  const [inventoryViewportHeight, setInventoryViewportHeight] = React.useState(0);
 
   const loadItems = React.useCallback(async () => {
     setLoading(true);
@@ -269,6 +275,16 @@ function App() {
 
   React.useEffect(() => {
     void loadItems();
+  }, []);
+
+  React.useEffect(() => {
+    const viewport = inventoryViewportRef.current;
+    if (!viewport) return;
+    const updateHeight = () => setInventoryViewportHeight(viewport.clientHeight);
+    updateHeight();
+    const observer = new ResizeObserver(updateHeight);
+    observer.observe(viewport);
+    return () => observer.disconnect();
   }, []);
 
   async function runExport(options: { filename: string; itemIds: string[]; saveHandle?: FileSystemFileHandle | null }) {
@@ -438,6 +454,21 @@ function App() {
       (usageOperator === "gt" && usageTotal > usageNumber!);
     return matchesCategory && matchesTool && matchesUsage && haystack.includes(query.toLowerCase());
   });
+  React.useEffect(() => {
+    const viewport = inventoryViewportRef.current;
+    if (!viewport) return;
+    viewport.scrollTop = 0;
+    setInventoryScrollTop(0);
+  }, [category, tool, query, usageOperator, usageValue]);
+
+  const visibleStart = Math.max(0, Math.floor(inventoryScrollTop / INVENTORY_ROW_HEIGHT) - INVENTORY_OVERSCAN);
+  const visibleEnd = Math.min(
+    filtered.length,
+    Math.ceil((inventoryScrollTop + inventoryViewportHeight) / INVENTORY_ROW_HEIGHT) + INVENTORY_OVERSCAN
+  );
+  const visibleItems = filtered.slice(visibleStart, visibleEnd);
+  const virtualPaddingTop = visibleStart * INVENTORY_ROW_HEIGHT;
+  const virtualPaddingBottom = Math.max(0, (filtered.length - visibleEnd) * INVENTORY_ROW_HEIGHT);
   const selectedVisibleState = selectedState(filtered, selectedListIds);
   const selectedVisibleCount = filtered.filter((item) => selectedListIds.has(item.id)).length;
   const selectedListItems = items.filter((item) => selectedListIds.has(item.id));
@@ -734,7 +765,11 @@ function App() {
             </div>
           </div>
           {error ? <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">{error}</div> : null}
-          <ScrollArea className="h-[calc(100dvh-186px)]">
+          <div
+            ref={inventoryViewportRef}
+            className="h-[calc(100dvh-186px)] overflow-y-auto rounded-md"
+            onScroll={(event) => setInventoryScrollTop(event.currentTarget.scrollTop)}
+          >
             <div className="overflow-hidden rounded-md border border-border bg-card card-edge">
               {loading ? (
                 <div className="space-y-3 p-4">
@@ -781,8 +816,9 @@ function App() {
                       {selectedVisibleCount}/{filtered.length} selected
                     </span>
                   </div>
-                  <ul className="divide-y divide-border/70">
-                    {filtered.map((item, index) => {
+                  <ul className="divide-y divide-border/70" style={{ paddingTop: virtualPaddingTop, paddingBottom: virtualPaddingBottom }}>
+                    {visibleItems.map((item, index) => {
+                      const absoluteIndex = visibleStart + index;
                       const isActive = selected?.id === item.id;
                       const isChecked = selectedListIds.has(item.id);
                       const usage = usageById[item.id];
@@ -790,11 +826,11 @@ function App() {
                       return (
                         <li
                           key={item.id}
-                          className="row-mount"
-                          style={{ ["--index" as any]: index < 24 ? index : 0 }}
+                          className="row-mount h-[86px]"
+                          style={{ ["--index" as any]: absoluteIndex < 24 ? absoluteIndex : 0 }}
                         >
                           <div
-                            className={`group relative flex w-full items-start gap-2 px-3.5 py-3 text-left transition-colors ${
+                            className={`group relative flex h-full w-full items-start gap-2 px-3.5 py-3 text-left transition-colors ${
                               isActive ? "bg-muted/60" : "hover:bg-muted/40"
                             }`}
                           >
@@ -870,7 +906,7 @@ function App() {
                 </>
               )}
             </div>
-          </ScrollArea>
+          </div>
         </section>
 
         <section className="min-w-0">
@@ -1051,7 +1087,7 @@ function StartupProbePanel({
   }, [activeTool, probe]);
 
   return (
-    <div className="mt-3 rounded-md border border-border bg-card p-3 card-edge">
+    <div className="mt-5 border-t border-border/70 pt-4">
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
           <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground">Startup probe</div>
@@ -1065,9 +1101,9 @@ function StartupProbePanel({
       {!probe ? (
         <div className="mt-3 text-[12px] text-muted-foreground">{loading ? "Reading sessions…" : "No probe data yet."}</div>
       ) : (
-        <div className="mt-3 space-y-3">
+        <div className="mt-3 space-y-4">
           {visibleTools.map((row) => (
-            <div key={row.tool} className="rounded-md border border-border/80 bg-background/60 p-2.5">
+            <div key={row.tool} className="border-t border-border/70 pt-3 first:border-t-0 first:pt-0">
               <div className="flex items-start justify-between gap-2">
                 <div>
                   <div className="text-[13px] font-medium">{TOOL_LABELS[row.tool]}</div>
@@ -1123,7 +1159,7 @@ function shortPrompt(value?: string) {
 }
 function MiniMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded border border-border/70 bg-muted/30 px-2 py-1">
+    <div className="border-l border-border/70 pl-2">
       <div className="font-mono text-[11px] tabular-nums">{value}</div>
       <div className="text-[10px] text-muted-foreground">{label}</div>
     </div>
