@@ -431,6 +431,7 @@ function makeArchivePathItem(tool: ToolName, category: Category, archivePath: st
     path: destinationPath,
     archivePath,
     destinationPath,
+    builtin: false,
     detailAvailable: false,
     valid: true,
     context: emptyContextStats()
@@ -453,6 +454,7 @@ function makeArchiveConfigItem(tool: ToolName, category: Category, archivePath: 
     archivePath,
     destinationPath,
     keyPath,
+    builtin: false,
     detailAvailable: false,
     valid: true,
     context: contextForText(JSON.stringify(value, null, 2))

@@ -12,6 +12,8 @@ export interface InventoryItem {
   source: string;
   path?: string;
   backupPath?: string;
+  /** True when shipped first-party by the provider CLI (Anthropic/OpenAI). */
+  builtin: boolean;
   detailAvailable: boolean;
   valid: boolean;
   invalidReason?: string;

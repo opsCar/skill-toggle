@@ -62,6 +62,9 @@ function pathItem(
     source,
     path: enabled ? target : undefined,
     backupPath,
+    // File-backed items always live in user/project config dirs, so they are
+    // never first-party. Only vendor tools are built-in (see isBuiltinTool).
+    builtin: false,
     detailAvailable: true,
     description: enabled ? target : `Backed up at ${backupPath}`,
     valid: validity?.valid ?? true,
@@ -126,6 +129,8 @@ function configItem(
     path: enabled ? configPath : undefined,
     backupPath,
     keyPath,
+    // Config-backed entries (MCP servers, hooks) are user-authored.
+    builtin: false,
     detailAvailable: true,
     description: enabled ? `${keyPath.join(".")} in ${configPath}` : `Backed up at ${backupPath}`,
     valid: true,
@@ -369,6 +374,7 @@ function toolAggregateToItem(aggregate: ToolAggregate): InventoryItem {
     source: aggregate.group === "mcp" ? `mcp:${aggregate.mcpServer ?? "unknown"}` : aggregate.group,
     path: aggregate.rawName,
     backupPath: undefined,
+    builtin: isBuiltinTool(aggregate.tool, aggregate),
     detailAvailable: true,
     description,
     valid: true,
@@ -508,6 +514,42 @@ function recordToolCall(aggregates: Map<string, ToolAggregate>, tool: ToolName, 
   }
 }
 
+// Curated lists of first-party tool names, used to label recognized vendor
+// tools in detail views. Sources (May 2026):
+//   Claude Code  → https://code.claude.com/docs/en/tools-reference
+//   Codex CLI    → https://developers.openai.com/codex/cli/features
+// These are intentionally non-exhaustive; the authoritative rule for "built-in"
+// is isBuiltinTool (any non-MCP tool is provided by the CLI vendor).
+const CLAUDE_BUILTIN_TOOLS = new Set([
+  "Agent", "AskUserQuestion", "Bash", "BashOutput", "CronCreate", "CronDelete", "CronList",
+  "Edit", "EnterPlanMode", "EnterWorktree", "ExitPlanMode", "ExitWorktree", "Glob", "Grep",
+  "KillShell", "ListMcpResourcesTool", "LSP", "Monitor", "MultiEdit", "NotebookEdit",
+  "NotebookRead", "PowerShell", "PushNotification", "Read", "ReadMcpResourceTool",
+  "RemoteTrigger", "ScheduleWakeup", "SendMessage", "ShareOnboardingGuide", "Skill",
+  "Task", "TaskCreate", "TaskGet", "TaskList", "TaskOutput", "TaskStop", "TaskUpdate",
+  "TeamCreate", "TeamDelete", "TodoWrite", "ToolSearch", "WaitForMcpServers", "WebFetch",
+  "WebSearch", "Write"
+]);
+const CODEX_BUILTIN_TOOLS = new Set([
+  "shell", "local_shell", "container.exec", "exec_command", "write_stdin", "unified_exec",
+  "apply_patch", "update_plan", "web_search", "read_file", "view_image"
+]);
+
+/**
+ * A tool is "built-in" when the CLI vendor ships it. In both Claude Code and
+ * Codex the only way to add a tool is to connect an MCP server, so every
+ * non-MCP tool (core + subagent groups) is first-party.
+ */
+export function isBuiltinTool(tool: ToolName, parsed: { rawName: string; group: "core" | "subagent" | "mcp" }): boolean {
+  if (parsed.group === "mcp") return false;
+  return true;
+}
+
+/** Whether a tool name appears in our curated first-party catalog. */
+export function isRecognizedBuiltinTool(tool: ToolName, rawName: string): boolean {
+  return (tool === "claude" ? CLAUDE_BUILTIN_TOOLS : CODEX_BUILTIN_TOOLS).has(rawName);
+}
+
 export function parseToolName(name: string): { rawName: string; displayName: string; group: "core" | "subagent" | "mcp"; mcpServer?: string } {
   if (name.startsWith("mcp__")) {
     const segments = name.split("__");
@@ -615,6 +657,7 @@ async function describeSessionDerived(item: InventoryItem): Promise<string> {
     "",
     `- Raw name: \`${entry.rawName}\``,
     `- Group: ${entry.group}${entry.mcpServer ? ` (server \`${entry.mcpServer}\`)` : ""}`,
+    `- Origin: ${isBuiltinTool(entry.tool, entry) ? `built-in (${entry.tool === "claude" ? "Anthropic" : "OpenAI"})${isRecognizedBuiltinTool(entry.tool, entry.rawName) ? ", recognized" : ""}` : "MCP server"}`,
     `- Provider: ${entry.tool}`,
     `- Loaded in: ${entry.declaredInSessions.size} session${entry.declaredInSessions.size === 1 ? "" : "s"} (scanned)`,
     `- Calls observed: ${entry.callCount}`,

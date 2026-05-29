@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseToolName } from "../server/discovery";
+import { isBuiltinTool, isRecognizedBuiltinTool, parseToolName } from "../server/discovery";
 
 describe("parseToolName", () => {
   it("classifies built-in core tools", () => {
@@ -37,5 +37,31 @@ describe("parseToolName", () => {
     const parsed = parseToolName("mcp__bare-server");
     expect(parsed.displayName).toBe("bare-server");
     expect(parsed.mcpServer).toBe("bare-server");
+  });
+});
+
+describe("isBuiltinTool", () => {
+  it("treats core and subagent tools as built-in", () => {
+    expect(isBuiltinTool("claude", parseToolName("Read"))).toBe(true);
+    expect(isBuiltinTool("claude", parseToolName("Task"))).toBe(true);
+    expect(isBuiltinTool("codex", parseToolName("shell"))).toBe(true);
+  });
+
+  it("never treats MCP tools as built-in", () => {
+    expect(isBuiltinTool("claude", parseToolName("mcp__chrome-devtools__click"))).toBe(false);
+    expect(isBuiltinTool("codex", parseToolName("mcp__context7__search"))).toBe(false);
+  });
+});
+
+describe("isRecognizedBuiltinTool", () => {
+  it("matches curated first-party tool catalogs per provider", () => {
+    expect(isRecognizedBuiltinTool("claude", "WebSearch")).toBe(true);
+    expect(isRecognizedBuiltinTool("codex", "apply_patch")).toBe(true);
+  });
+
+  it("returns false for unknown or cross-provider names", () => {
+    expect(isRecognizedBuiltinTool("claude", "apply_patch")).toBe(false);
+    expect(isRecognizedBuiltinTool("codex", "WebSearch")).toBe(false);
+    expect(isRecognizedBuiltinTool("claude", "totally_made_up")).toBe(false);
   });
 });

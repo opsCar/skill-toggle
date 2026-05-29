@@ -7,6 +7,7 @@ Skill Toggle scans the current project and your home-directory tool config, show
 ## Features
 
 - Browse Claude and Codex skills, MCP entries, hooks, rules, agents, and plugins.
+- Mark and filter built-in items — tools shipped first-party by Anthropic/OpenAI versus user-installed extensions.
 - Toggle supported items on or off.
 - Inspect item contents and config-entry details.
 - View rough context-size estimates and usage/startup probes.

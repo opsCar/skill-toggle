@@ -37,6 +37,7 @@ test("lists skills and exposes markdown detail", async () => {
 
   expect(item?.category).toBe("skills");
   expect(item?.enabled).toBe(true);
+  expect(item?.builtin).toBe(false);
   expect(item?.context.estimatedTokens).toBeGreaterThan(0);
   expect(item?.context.lines).toBeGreaterThanOrEqual(4);
 

@@ -15,6 +15,14 @@ export interface InventoryItem {
   backupPath?: string;
   /** Config-entry key path (e.g. ["mcpServers", "demo"]); absent for path/session items. */
   keyPath?: string[];
+  /**
+   * True when the item ships first-party with the provider CLI (Anthropic for
+   * Claude Code, OpenAI for Codex) rather than being user/third-party installed.
+   * In practice only vendor tools are built-in: every non-MCP tool is provided
+   * by the CLI, while skills/mcp/hooks/rules/agents/plugins always come from
+   * user or project config directories.
+   */
+  builtin: boolean;
   detailAvailable: boolean;
   valid: boolean;
   invalidReason?: string;

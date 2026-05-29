@@ -70,10 +70,12 @@ function App() {
   const [selected, setSelected] = React.useState<ItemDetail | null>(null);
   const [category, setCategory] = React.useState<Category | "all">("all");
   const [tool, setTool] = React.useState<ToolName | "all">("all");
+  const [origin, setOrigin] = React.useState<"all" | "builtin" | "custom">("all");
   const [query, setQuery] = React.useState("");
   const [selectedListIds, setSelectedListIds] = React.useState<Set<string>>(new Set());
   const [usageOperator, setUsageOperator] = React.useState<"lt" | "eq" | "gt">("eq");
   const [usageValue, setUsageValue] = React.useState("");
+  const [usageSortOrder, setUsageSortOrder] = React.useState<"desc" | "asc">("desc");
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [status, setStatus] = React.useState("");
@@ -346,24 +348,36 @@ function App() {
 
   const usageNumber = usageValue.trim() === "" ? null : Number(usageValue);
   const hasUsageFilter = usageNumber !== null && Number.isFinite(usageNumber);
-  const filtered = items.filter((item) => {
-    const matchesCategory = category === "all" || item.category === category;
-    const matchesTool = tool === "all" || item.tool === tool;
-    const haystack = `${item.name} ${item.description} ${item.source}`.toLowerCase();
-    const usageTotal = usageById[item.id]?.total ?? 0;
-    const matchesUsage =
-      !hasUsageFilter ||
-      (usageOperator === "lt" && usageTotal < usageNumber!) ||
-      (usageOperator === "eq" && usageTotal === usageNumber!) ||
-      (usageOperator === "gt" && usageTotal > usageNumber!);
-    return matchesCategory && matchesTool && matchesUsage && haystack.includes(query.toLowerCase());
-  });
+  const filtered = React.useMemo(() => {
+    const filteredItems = items.filter((item) => {
+      const matchesCategory = category === "all" || item.category === category;
+      const matchesTool = tool === "all" || item.tool === tool;
+      const matchesOrigin = origin === "all" || (origin === "builtin" ? item.builtin : !item.builtin);
+      const haystack = `${item.name} ${item.description} ${item.source}`.toLowerCase();
+      const usageTotal = usageById[item.id]?.total ?? 0;
+      const matchesUsage =
+        !hasUsageFilter ||
+        (usageOperator === "lt" && usageTotal < usageNumber!) ||
+        (usageOperator === "eq" && usageTotal === usageNumber!) ||
+        (usageOperator === "gt" && usageTotal > usageNumber!);
+      return matchesCategory && matchesTool && matchesOrigin && matchesUsage && haystack.includes(query.toLowerCase());
+    });
+
+    return filteredItems.slice().sort((a, b) => {
+      const usageDelta =
+        usageSortOrder === "desc"
+          ? (usageById[b.id]?.total ?? 0) - (usageById[a.id]?.total ?? 0)
+          : (usageById[a.id]?.total ?? 0) - (usageById[b.id]?.total ?? 0);
+      if (usageDelta !== 0) return usageDelta;
+      return a.name.localeCompare(b.name);
+    });
+  }, [category, hasUsageFilter, items, origin, query, tool, usageById, usageNumber, usageOperator, usageSortOrder]);
   React.useEffect(() => {
     const viewport = inventoryViewportRef.current;
     if (!viewport) return;
     viewport.scrollTop = 0;
     setInventoryScrollTop(0);
-  }, [category, tool, query, usageOperator, usageValue]);
+  }, [category, tool, origin, query, usageOperator, usageValue, usageSortOrder]);
 
   const visibleStart = Math.max(0, Math.floor(inventoryScrollTop / INVENTORY_ROW_HEIGHT) - INVENTORY_OVERSCAN);
   const visibleEnd = Math.min(
@@ -559,7 +573,7 @@ function App() {
             ) : null}
           </div>
 
-          <div className="mb-5 flex rounded-md border border-border bg-card p-0.5 card-edge">
+          <div className="mb-2 flex rounded-md border border-border bg-card p-0.5 card-edge">
             {(["all", "claude", "codex"] as const).map((key) => (
               <button
                 key={key}
@@ -572,6 +586,23 @@ function App() {
                 }`}
               >
                 {key === "all" ? "All" : key === "claude" ? "Claude" : "Codex"}
+              </button>
+            ))}
+          </div>
+
+          <div className="mb-5 flex rounded-md border border-border bg-card p-0.5 card-edge" title="Built-in tools ship with the CLI (Anthropic/Codex); custom items are user-installed.">
+            {(["all", "builtin", "custom"] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setOrigin(key)}
+                className={`relative flex-1 rounded-[6px] px-2 py-1.5 text-[12px] font-medium transition-all duration-150 press ${
+                  origin === key
+                    ? "bg-foreground text-background shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {key === "all" ? "All" : key === "builtin" ? "Built-in" : "Custom"}
               </button>
             ))}
           </div>
@@ -715,6 +746,26 @@ function App() {
                           onCheckedChange={(checked) => void toggleSelectedItems(checked)}
                         />
                       </label>
+                      <div className="flex shrink-0 items-center gap-2 border-l border-border/70 pl-3 text-[11px] text-muted-foreground">
+                        <span className="font-mono uppercase tracking-[0.12em]">Sort usage</span>
+                        <div className="flex h-7 items-center gap-1 rounded-md border border-border bg-card p-1 card-edge">
+                          {(["desc", "asc"] as const).map((key) => (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => setUsageSortOrder(key)}
+                              className={`flex h-5 min-w-8 items-center justify-center rounded-[5px] px-2 font-mono text-[10px] uppercase tracking-[0.08em] transition-colors press ${
+                                usageSortOrder === key
+                                  ? "bg-foreground text-background"
+                                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                              }`}
+                              aria-label={key === "desc" ? "Sort usage descending" : "Sort usage ascending"}
+                            >
+                              {key}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                     </div>
                     <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
                       {selectedVisibleCount}/{filtered.length} selected
@@ -770,6 +821,14 @@ function App() {
                                   <span className={`truncate text-[13px] font-medium tracking-tightish ${isActive ? "text-foreground" : "text-foreground/90"}`}>
                                     {item.name}
                                   </span>
+                                  {item.builtin ? (
+                                    <span
+                                      className="shrink-0 rounded-sm bg-sky-500/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-sky-600 dark:text-sky-400"
+                                      title="Ships with the CLI (Anthropic/OpenAI)"
+                                    >
+                                      built-in
+                                    </span>
+                                  ) : null}
                                   {invalid ? (
                                     <span className="shrink-0 rounded-sm bg-destructive/10 px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider text-destructive">
                                       invalid
@@ -828,6 +887,14 @@ function App() {
                     ) : (
                       <span className="rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">off</span>
                     )}
+                    {selected.builtin ? (
+                      <span
+                        className="rounded-full bg-sky-500/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-sky-600 dark:text-sky-400"
+                        title="Ships with the CLI (Anthropic/OpenAI)"
+                      >
+                        built-in
+                      </span>
+                    ) : null}
                     {selected.category === "skills" && !selected.valid ? (
                       <span className="rounded-full bg-destructive/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-destructive">invalid</span>
                     ) : null}
@@ -863,6 +930,7 @@ function App() {
                   <Field label="Tool" value={TOOL_LABELS[selected.tool]} />
                   <Field label="Category" value={CATEGORY_LABELS[selected.category]} />
                   <Field label="Kind" value={selected.kind === "path" ? "Path" : selected.kind === "session-derived" ? "Session-derived" : "Config entry"} />
+                  <Field label="Origin" value={selected.builtin ? `Built-in (${selected.tool === "claude" ? "Anthropic" : "OpenAI"})` : "Custom"} />
                   <Field label="Source" value={selected.source} mono truncate />
                 </div>
               </div>
