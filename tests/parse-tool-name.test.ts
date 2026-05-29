@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseToolName } from "./discovery";
+import { parseToolName } from "../server/discovery";
 
 describe("parseToolName", () => {
   it("classifies built-in core tools", () => {

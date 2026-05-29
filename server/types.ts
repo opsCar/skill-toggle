@@ -13,6 +13,8 @@ export interface InventoryItem {
   source: string;
   path?: string;
   backupPath?: string;
+  /** Config-entry key path (e.g. ["mcpServers", "demo"]); absent for path/session items. */
+  keyPath?: string[];
   detailAvailable: boolean;
   valid: boolean;
   invalidReason?: string;

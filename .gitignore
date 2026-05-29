@@ -1,2 +1,12 @@
 node_modules/
+
+# This project uses pnpm; ignore other package managers' lockfiles
 package-lock.json
+yarn.lock
+
+# Build output and caches
+dist/
+*.tsbuildinfo
+
+# Tooling reports
+metrics.json

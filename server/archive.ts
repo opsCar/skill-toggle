@@ -5,7 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import { parse, stringify } from "smol-toml";
 import { getAt, listInventory, readConfig, setAt } from "./discovery";
-import type { Category, ConfigEntryMeta, ContextStats, InventoryItem, ToolName } from "./types";
+import type { Category, ConfigEntryMeta, InventoryItem, ToolName } from "./types";
+import { contextForText, emptyContextStats, exists } from "./shared";
 
 const home = os.homedir();
 
@@ -81,15 +82,6 @@ export type AppendImportSummary = {
   appendedItems: string[];
   restoredSources: string[];
 };
-
-async function exists(target: string) {
-  try {
-    await fs.access(target);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 async function existingSources(): Promise<string[]> {
   const found: string[] = [];
@@ -177,7 +169,7 @@ async function writeSelectiveExport(destPath: string, itemIds: string[]): Promis
       if (item.enabled) {
         if (!item.path) continue;
         configPath = item.path;
-        keyPath = item.description.split(" in ")[0].split(".");
+        keyPath = item.keyPath && item.keyPath.length > 0 ? item.keyPath : item.description.split(" in ")[0].split(".");
         const format: "json" | "toml" = configPath.endsWith(".toml") ? "toml" : "json";
         const live = await readConfig(configPath, format);
         value = getAt(live, keyPath);
@@ -484,23 +476,6 @@ async function readArchiveConfig(configPath: string, format: "json" | "toml") {
   } catch {
     return {};
   }
-}
-
-function contextForText(text: string): ContextStats {
-  const charsPerToken = 4;
-  const bytes = Buffer.byteLength(text, "utf8");
-  return {
-    estimatedTokens: text.length === 0 ? 0 : Math.ceil(text.length / charsPerToken),
-    characters: text.length,
-    bytes,
-    lines: text.length === 0 ? 0 : text.split(/\r\n|\r|\n/).length,
-    metric: "approx_chars_per_token",
-    charsPerToken
-  };
-}
-
-function emptyContextStats(): ContextStats {
-  return contextForText("");
 }
 
 async function listTarTopLevel(tarPath: string): Promise<string[]> {

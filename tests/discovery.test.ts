@@ -5,16 +5,24 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 let tmp = "";
 let oldHome = "";
+let oldProjectRoot: string | undefined;
 
 beforeEach(async () => {
   tmp = await fs.mkdtemp(path.join(os.tmpdir(), "skill-toggle-"));
   oldHome = process.env.HOME ?? "";
+  oldProjectRoot = process.env.SKILL_TOGGLE_PROJECT_ROOT;
   process.env.HOME = tmp;
+  // Pin the project root to an isolated dir so the repo's own CLAUDE.md /
+  // AGENTS.md / skills never leak into the inventory under test.
+  process.env.SKILL_TOGGLE_PROJECT_ROOT = path.join(tmp, "workspace");
+  await fs.mkdir(process.env.SKILL_TOGGLE_PROJECT_ROOT, { recursive: true });
   vi.resetModules();
 });
 
 afterEach(async () => {
   process.env.HOME = oldHome;
+  if (oldProjectRoot === undefined) delete process.env.SKILL_TOGGLE_PROJECT_ROOT;
+  else process.env.SKILL_TOGGLE_PROJECT_ROOT = oldProjectRoot;
   await fs.rm(tmp, { recursive: true, force: true });
 });
 
@@ -102,11 +110,10 @@ test("lists and toggles MCP config entries", async () => {
 });
 
 test("lists Claude MCP entries from global state and project .mcp.json", async () => {
-  const oldCwd = process.cwd();
   const projectDir = path.join(tmp, "project");
   await fs.mkdir(projectDir, { recursive: true });
-  process.chdir(projectDir);
-  const activeProjectRoot = process.cwd();
+  process.env.SKILL_TOGGLE_PROJECT_ROOT = projectDir;
+  const activeProjectRoot = projectDir;
 
   const globalStatePath = path.join(tmp, ".claude.json");
   await fs.writeFile(
@@ -136,14 +143,10 @@ test("lists Claude MCP entries from global state and project .mcp.json", async (
   const projectMcpPath = path.join(activeProjectRoot, ".mcp.json");
   await fs.writeFile(projectMcpPath, JSON.stringify({ mcpServers: { context7: { url: "https://mcp.context7.com/mcp" } } }, null, 2));
 
-  try {
-    const { listInventory } = await import("../server/discovery");
-    const items = await listInventory();
+  const { listInventory } = await import("../server/discovery");
+  const items = await listInventory();
 
-    expect(items.some((row) => row.tool === "claude" && row.category === "mcp" && row.name === "chrome-devtools" && row.path === globalStatePath)).toBe(true);
-    expect(items.some((row) => row.tool === "claude" && row.category === "mcp" && row.name === "localdb" && row.path === globalStatePath)).toBe(true);
-    expect(items.some((row) => row.tool === "claude" && row.category === "mcp" && row.name === "context7" && row.path === projectMcpPath)).toBe(true);
-  } finally {
-    process.chdir(oldCwd);
-  }
+  expect(items.some((row) => row.tool === "claude" && row.category === "mcp" && row.name === "chrome-devtools" && row.path === globalStatePath)).toBe(true);
+  expect(items.some((row) => row.tool === "claude" && row.category === "mcp" && row.name === "localdb" && row.path === globalStatePath)).toBe(true);
+  expect(items.some((row) => row.tool === "claude" && row.category === "mcp" && row.name === "context7" && row.path === projectMcpPath)).toBe(true);
 });

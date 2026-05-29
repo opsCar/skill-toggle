@@ -2,6 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import type { Category, InventoryItem, ToolName } from "./types";
+import { estimateTokens, safeRead, walkFiles } from "./shared";
 
 export interface UsageStats {
   total: number;
@@ -186,11 +187,10 @@ function probeForTool(tool: ToolName, items: InventoryItem[], promptTokens: numb
 }
 
 function contextForProbeText(text: string) {
-  const charsPerToken = 4;
   return {
-    estimatedTokens: text.length === 0 ? 0 : Math.ceil(text.length / charsPerToken),
+    estimatedTokens: estimateTokens(text),
     metric: "approx_chars_per_token" as const,
-    charsPerToken
+    charsPerToken: 4
   };
 }
 
@@ -288,7 +288,7 @@ async function latestJsonl(root: string, matches: (rows: any[]) => boolean) {
 }
 
 async function latestJsonlCandidates(root: string) {
-  const files = (await walk(root, 5)).filter((file) => file.endsWith(".jsonl"));
+  const files = await walkFiles(root, 5, (name) => name.endsWith(".jsonl"));
   const candidates = await Promise.all(
     files.map(async (file) => {
       const [rows, stat] = await Promise.all([readJsonl(file), fs.stat(file).catch(() => undefined)]);
@@ -345,10 +345,6 @@ function textComponent(kind: string, label: string, text: string): StartupProbeC
   return { kind, label, estimatedTokens: estimateTokens(text), characters: text.length };
 }
 
-function estimateTokens(text: string) {
-  return text.length === 0 ? 0 : Math.ceil(text.length / 4);
-}
-
 function kindForLoadedText(text: string) {
   if (text.includes("<skills_instructions>")) return "skill_discovery_instructions";
   if (text.startsWith("# AGENTS.md instructions")) return "project_rules";
@@ -378,14 +374,14 @@ async function collectUsageEvents(): Promise<UsageEvent[]> {
 
 async function collectClaudeEvents() {
   const root = path.join(home, ".claude", "projects");
-  const files = (await walk(root, 5)).filter((file) => file.endsWith(".jsonl"));
+  const files = await walkFiles(root, 5, (name) => name.endsWith(".jsonl"));
   const chunks = await Promise.all(files.map((file) => eventsFromJsonl(file, "claude")));
   return chunks.flat();
 }
 
 async function collectCodexEvents() {
   const root = path.join(home, ".codex", "sessions");
-  const files = (await walk(root, 5)).filter((file) => file.endsWith(".jsonl"));
+  const files = await walkFiles(root, 5, (name) => name.endsWith(".jsonl"));
   const chunks = await Promise.all(files.map((file) => eventsFromJsonl(file, "codex")));
   const globalState = await eventsFromCodexGlobalState();
   return [...chunks.flat(), ...globalState];
@@ -571,29 +567,3 @@ function normalize(value: string) {
   return value.toLowerCase().replace(/^mcp__/, "").replace(/\.(md|json|toml|yaml|yml)$/i, "");
 }
 
-async function walk(root: string, depth: number): Promise<string[]> {
-  if (depth < 0) return [];
-  let entries;
-  try {
-    entries = await fs.readdir(root, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  const rows = await Promise.all(
-    entries.map(async (entry) => {
-      const target = path.join(root, entry.name);
-      if (entry.isDirectory()) return walk(target, depth - 1);
-      if (entry.isFile()) return [target];
-      return [];
-    })
-  );
-  return rows.flat();
-}
-
-async function safeRead(target: string) {
-  try {
-    return await fs.readFile(target, "utf8");
-  } catch {
-    return "";
-  }
-}

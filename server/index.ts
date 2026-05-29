@@ -1,8 +1,10 @@
 import express from "express";
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { createReadStream } from "node:fs";
+import { createReadStream, createWriteStream } from "node:fs";
+import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { appendImportArchive, applyImportArchive, inspectImportArchive, writeExportArchive } from "./archive";
 import { getDetail, listInventory, toggleItem } from "./discovery";
@@ -112,15 +114,23 @@ function sanitizeFilename(input: string, stamp: string): string {
 app.get("/api/export", handleExport);
 app.post("/api/export", handleExport);
 
-app.post("/api/import", express.raw({ type: ["application/gzip", "application/x-gzip", "application/octet-stream"], limit: "5gb" }), async (req, res, next) => {
-  const body = req.body as Buffer | undefined;
-  if (!body || body.length === 0) {
-    res.status(400).json({ error: "Empty upload — send the tar.gz as the raw request body" });
-    return;
-  }
-  const tmpPath = path.join(os.tmpdir(), `skill-toggle-import-${Date.now()}.tar.gz`);
+// Stream the upload directly to a temp file so multi-gigabyte archives never
+// have to sit in memory. Returns the number of bytes written.
+async function streamUploadToFile(req: express.Request, destPath: string): Promise<number> {
+  const writeStream = createWriteStream(destPath);
+  await pipeline(req, writeStream);
+  const stat = await fs.stat(destPath);
+  return stat.size;
+}
+
+app.post("/api/import", async (req, res, next) => {
+  const tmpPath = path.join(os.tmpdir(), `skill-toggle-import-${randomToken()}.tar.gz`);
   try {
-    await fs.writeFile(tmpPath, body);
+    const bytes = await streamUploadToFile(req, tmpPath);
+    if (bytes === 0) {
+      res.status(400).json({ error: "Empty upload — send the tar.gz as the raw request body" });
+      return;
+    }
     const summary = await applyImportArchive(tmpPath);
     res.json(summary);
   } catch (error) {
@@ -130,16 +140,16 @@ app.post("/api/import", express.raw({ type: ["application/gzip", "application/x-
   }
 });
 
-app.post("/api/import/inspect", express.raw({ type: ["application/gzip", "application/x-gzip", "application/octet-stream"], limit: "5gb" }), async (req, res, next) => {
-  const body = req.body as Buffer | undefined;
-  if (!body || body.length === 0) {
-    res.status(400).json({ error: "Empty upload — send the tar.gz as the raw request body" });
-    return;
-  }
-  const token = cryptoRandomToken();
+app.post("/api/import/inspect", async (req, res, next) => {
+  const token = randomToken();
   const tmpPath = path.join(os.tmpdir(), `skill-toggle-import-session-${token}.tar.gz`);
   try {
-    await fs.writeFile(tmpPath, body);
+    const bytes = await streamUploadToFile(req, tmpPath);
+    if (bytes === 0) {
+      await fs.rm(tmpPath, { force: true }).catch(() => undefined);
+      res.status(400).json({ error: "Empty upload — send the tar.gz as the raw request body" });
+      return;
+    }
     const inspection = await inspectImportArchive(tmpPath);
     importSessions.set(token, { path: tmpPath, createdAt: Date.now() });
     cleanupImportSessions();
@@ -169,8 +179,8 @@ app.post("/api/import/append", async (req, res, next) => {
   }
 });
 
-function cryptoRandomToken() {
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+function randomToken() {
+  return `${Date.now()}-${crypto.randomBytes(12).toString("hex")}`;
 }
 
 function cleanupImportSessions() {

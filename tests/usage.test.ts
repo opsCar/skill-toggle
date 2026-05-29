@@ -5,16 +5,24 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 let tmp = "";
 let oldHome = "";
+let oldProjectRoot: string | undefined;
 
 beforeEach(async () => {
   tmp = await fs.mkdtemp(path.join(os.tmpdir(), "skill-toggle-"));
   oldHome = process.env.HOME ?? "";
+  oldProjectRoot = process.env.SKILL_TOGGLE_PROJECT_ROOT;
   process.env.HOME = tmp;
+  // Pin the project root to an isolated dir so the repo's own CLAUDE.md /
+  // AGENTS.md / skills never leak into the inventory under test.
+  process.env.SKILL_TOGGLE_PROJECT_ROOT = path.join(tmp, "workspace");
+  await fs.mkdir(process.env.SKILL_TOGGLE_PROJECT_ROOT, { recursive: true });
   vi.resetModules();
 });
 
 afterEach(async () => {
   process.env.HOME = oldHome;
+  if (oldProjectRoot === undefined) delete process.env.SKILL_TOGGLE_PROJECT_ROOT;
+  else process.env.SKILL_TOGGLE_PROJECT_ROOT = oldProjectRoot;
   await fs.rm(tmp, { recursive: true, force: true });
 });
 

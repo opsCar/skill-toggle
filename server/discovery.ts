@@ -4,9 +4,10 @@ import os from "node:os";
 import crypto from "node:crypto";
 import { parse, stringify } from "smol-toml";
 import type { Category, ConfigEntryMeta, ContextStats, InventoryItem, ItemDetail, PathItemMeta, ToolName } from "./types";
+import { contextForText, emptyContextStats, exists, safeRead, walkFiles } from "./shared";
 
 const home = os.homedir();
-const projectRoot = process.cwd();
+const projectRoot = process.env.SKILL_TOGGLE_PROJECT_ROOT ?? process.cwd();
 const claudeConfigRoot = process.env.CLAUDE_CONFIG_DIR ?? path.join(home, ".claude");
 const codexConfigRoot = process.env.CODEX_HOME ?? path.join(home, ".codex");
 
@@ -30,23 +31,6 @@ function idFor(parts: string[]) {
 function labelFromPath(target: string) {
   const base = path.basename(target);
   return base.replace(/\.(md|json|toml|yaml|yml|js|ts|mjs|cjs)$/i, "");
-}
-
-async function exists(target: string) {
-  try {
-    await fs.access(target);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function safeRead(target: string) {
-  try {
-    return await fs.readFile(target, "utf8");
-  } catch {
-    return "";
-  }
 }
 
 async function listChildren(dir: string) {
@@ -141,6 +125,7 @@ function configItem(
     source,
     path: enabled ? configPath : undefined,
     backupPath,
+    keyPath,
     detailAvailable: true,
     description: enabled ? `${keyPath.join(".")} in ${configPath}` : `Backed up at ${backupPath}`,
     valid: true,
@@ -554,12 +539,7 @@ function previewToolInput(input: unknown): string | undefined {
 }
 
 async function latestSessionFiles(root: string, limit: number): Promise<string[]> {
-  let entries: string[];
-  try {
-    entries = await walkJsonl(root);
-  } catch {
-    return [];
-  }
+  const entries = await walkFiles(root, 6, (name) => name.endsWith(".jsonl"));
   if (entries.length === 0) return [];
   const stats = await Promise.all(
     entries.map(async (file) => {
@@ -575,23 +555,6 @@ async function latestSessionFiles(root: string, limit: number): Promise<string[]
     .sort((a, b) => b.mtimeMs - a.mtimeMs)
     .slice(0, limit)
     .map((row) => row.file);
-}
-
-async function walkJsonl(root: string, depth = 6): Promise<string[]> {
-  if (depth < 0) return [];
-  let entries;
-  try {
-    entries = await fs.readdir(root, { withFileTypes: true });
-  } catch {
-    return [];
-  }
-  const out: string[] = [];
-  for (const entry of entries) {
-    const target = path.join(root, entry.name);
-    if (entry.isDirectory()) out.push(...(await walkJsonl(target, depth - 1)));
-    else if (entry.isFile() && entry.name.endsWith(".jsonl")) out.push(target);
-  }
-  return out;
 }
 
 async function describePath(target: string) {
@@ -622,23 +585,6 @@ function contextForValue(value: unknown): ContextStats {
   return contextForText(JSON.stringify(value, null, 2));
 }
 
-function contextForText(text: string): ContextStats {
-  const charsPerToken = 4;
-  const bytes = Buffer.byteLength(text, "utf8");
-  return {
-    estimatedTokens: text.length === 0 ? 0 : Math.ceil(text.length / charsPerToken),
-    characters: text.length,
-    bytes,
-    lines: text.length === 0 ? 0 : text.split(/\r\n|\r|\n/).length,
-    metric: "approx_chars_per_token",
-    charsPerToken
-  };
-}
-
-function emptyContextStats(): ContextStats {
-  return contextForText("");
-}
-
 export async function getDetail(id: string): Promise<ItemDetail | undefined> {
   const item = (await listInventory()).find((row) => row.id === id);
   if (!item) return undefined;
@@ -647,7 +593,7 @@ export async function getDetail(id: string): Promise<ItemDetail | undefined> {
   }
   if (item.kind === "config-entry") {
     const detail = item.enabled
-      ? JSON.stringify(getAt(await readConfig(item.path!, item.path!.endsWith(".toml") ? "toml" : "json"), item.description.split(" in ")[0].split(".")), null, 2)
+      ? JSON.stringify(getAt(await readConfig(item.path!, item.path!.endsWith(".toml") ? "toml" : "json"), keyPathFor(item)), null, 2)
       : await safeRead(item.backupPath!);
     return { ...item, detail, detailType: "json" };
   }
@@ -698,9 +644,23 @@ async function describeSessionDerived(item: InventoryItem): Promise<string> {
   return `${header}${linkHint}\n\n## Recent invocations\n\n${invocationsBlock}\n`;
 }
 
-export async function toggleItem(id: string, enabled: boolean) {
+/**
+ * Resolve a config entry's structured key path. Prefer the value carried on the
+ * item; fall back to parsing the legacy description only for older backup records.
+ */
+function keyPathFor(item: InventoryItem): string[] {
+  if (item.keyPath && item.keyPath.length > 0) return item.keyPath;
+  return item.description.split(" in ")[0].split(".");
+}
+
+async function requireItem(id: string): Promise<InventoryItem> {
   const item = (await listInventory()).find((row) => row.id === id);
   if (!item) throw new Error("Item not found");
+  return item;
+}
+
+export async function toggleItem(id: string, enabled: boolean): Promise<InventoryItem> {
+  const item = await requireItem(id);
   if (item.kind === "session-derived") {
     const error = item.source.startsWith("mcp:")
       ? Object.assign(new Error(`This tool is provided by MCP server "${item.source.slice(4)}". Disable that server from the MCP category to remove all of its tools.`), { statusCode: 409 })
@@ -726,7 +686,7 @@ export async function toggleItem(id: string, enabled: boolean) {
       await fs.rename(meta.payloadPath, meta.originalPath);
       await fs.rm(recordDir, { recursive: true, force: true });
     }
-    return (await listInventory()).find((row) => row.id === id);
+    return requireItem(id);
   }
 
   const backupPath = path.join(backupHome[item.tool], "config", `${item.id}.json`);
@@ -734,7 +694,7 @@ export async function toggleItem(id: string, enabled: boolean) {
     const configPath = item.path!;
     const format = configPath.endsWith(".toml") ? "toml" : "json";
     const data = await readConfig(configPath, format);
-    const keyPath = item.description.split(" in ")[0].split(".");
+    const keyPath = keyPathFor(item);
     const value = getAt(data, keyPath);
     const meta: ConfigEntryMeta = { id: item.id, tool: item.tool, category: item.category, kind: "config-entry", name: item.name, source: item.source, configPath, keyPath, value };
     await fs.mkdir(path.dirname(backupPath), { recursive: true });
@@ -749,5 +709,5 @@ export async function toggleItem(id: string, enabled: boolean) {
     await writeConfig(meta.configPath, format, data);
     await fs.rm(backupPath, { force: true });
   }
-  return (await listInventory()).find((row) => row.id === id);
+  return requireItem(id);
 }

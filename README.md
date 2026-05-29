@@ -15,12 +15,12 @@ Skill Toggle scans the current project and your home-directory tool config, show
 ## Requirements
 
 - Node.js 22 or newer is recommended.
-- npm.
+- pnpm (this repo is managed with `pnpm-lock.yaml`).
 
 ## Setup
 
 ```sh
-npm install
+pnpm install
 ```
 
 ## Development
@@ -28,7 +28,7 @@ npm install
 Run the API server and Vite app together:
 
 ```sh
-npm run dev
+pnpm dev
 ```
 
 The app runs through Vite at:
@@ -50,19 +50,19 @@ Set `PORT` or `SKILL_TOGGLE_API_PORT` to change the API port.
 Build the frontend and TypeScript project:
 
 ```sh
-npm run build
+pnpm build
 ```
 
 Start the production server:
 
 ```sh
-npm start
+pnpm start
 ```
 
 ## Tests
 
 ```sh
-npm test
+pnpm test
 ```
 
 ## Safety Notes
