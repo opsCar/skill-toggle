@@ -10,18 +10,21 @@ const home = os.homedir();
 const projectRoot = process.env.SKILL_TOGGLE_PROJECT_ROOT ?? process.cwd();
 const claudeConfigRoot = process.env.CLAUDE_CONFIG_DIR ?? path.join(home, ".claude");
 const codexConfigRoot = process.env.CODEX_HOME ?? path.join(home, ".codex");
+const agentsConfigRoot = process.env.AGENTS_HOME ?? path.join(home, ".agents");
 
 const TOOL_SCAN_LIMIT_PER_SOURCE = 8;
 const TOOL_INVOCATION_SAMPLE = 5;
 
 const toolHome: Record<ToolName, string> = {
   claude: claudeConfigRoot,
-  codex: codexConfigRoot
+  codex: codexConfigRoot,
+  agents: agentsConfigRoot
 };
 
 const backupHome: Record<ToolName, string> = {
   claude: path.join(home, ".claude_bak"),
-  codex: path.join(home, ".codex_bak")
+  codex: path.join(home, ".codex_bak"),
+  agents: path.join(home, ".agents_bak")
 };
 
 function idFor(parts: string[]) {
@@ -157,7 +160,7 @@ const pathSources: Record<ToolName, Record<Category, string[]>> = {
     tools: []
   },
   codex: {
-    skills: [path.join(codexConfigRoot, "skills"), path.join(home, ".agents", "skills"), path.join(projectRoot, ".codex", "skills")],
+    skills: [path.join(codexConfigRoot, "skills"), path.join(projectRoot, ".codex", "skills")],
     mcp: [path.join(codexConfigRoot, "mcp"), path.join(projectRoot, ".codex", "mcp")],
     hooks: [path.join(codexConfigRoot, "hooks"), path.join(projectRoot, ".codex", "hooks")],
     rules: [
@@ -167,9 +170,21 @@ const pathSources: Record<ToolName, Record<Category, string[]>> = {
       path.join(projectRoot, ".codex", "AGENTS.md"),
       path.join(projectRoot, ".codex", "rules")
     ],
-    agents: [path.join(codexConfigRoot, "agents"), path.join(home, ".agents"), path.join(projectRoot, ".codex", "agents")],
+    agents: [path.join(codexConfigRoot, "agents"), path.join(projectRoot, ".codex", "agents")],
     plugins: [path.join(codexConfigRoot, "plugins"), path.join(projectRoot, ".codex", "plugins")],
     // Dynamic workflows are a Claude Code feature; Codex has no equivalent.
+    workflows: [],
+    tools: []
+  },
+  // `~/.agents` is the cross-tool agent home (AGENTS standard); its skills are
+  // shared, so they are surfaced as their own provider rather than under Codex.
+  agents: {
+    skills: [path.join(agentsConfigRoot, "skills"), path.join(projectRoot, ".agents", "skills")],
+    mcp: [],
+    hooks: [],
+    rules: [],
+    agents: [path.join(agentsConfigRoot, "agents"), path.join(projectRoot, ".agents", "agents")],
+    plugins: [],
     workflows: [],
     tools: []
   }
@@ -304,9 +319,9 @@ async function collectConfigItems() {
 
 export async function listInventory() {
   const activePathItems = await Promise.all(
-    (["claude", "codex"] as const).flatMap((tool) => (["skills", "mcp", "hooks", "rules", "agents", "plugins", "workflows"] as const).map((category) => collectPathItems(tool, category)))
+    (["claude", "codex", "agents"] as const).flatMap((tool) => (["skills", "mcp", "hooks", "rules", "agents", "plugins", "workflows"] as const).map((category) => collectPathItems(tool, category)))
   );
-  const disabledPathItems = await Promise.all((["claude", "codex"] as const).map(collectDisabledPathItems));
+  const disabledPathItems = await Promise.all((["claude", "codex", "agents"] as const).map(collectDisabledPathItems));
   const configItems = await collectConfigItems();
   const toolItems = await collectToolItems();
   const byId = new Map<string, InventoryItem>();

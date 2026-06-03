@@ -1,4 +1,4 @@
-export type ToolName = "claude" | "codex";
+export type ToolName = "claude" | "codex" | "agents";
 export type Category = "skills" | "mcp" | "hooks" | "rules" | "agents" | "plugins" | "workflows" | "tools";
 
 export interface InventoryItem {
@@ -101,7 +101,8 @@ export interface ExportSelection {
 
 export const TOOL_LABELS: Record<ToolName, string> = {
   claude: "Claude Code",
-  codex: "Codex"
+  codex: "Codex",
+  agents: "Agents"
 };
 
 export const CATEGORY_LABELS: Record<Category, string> = {

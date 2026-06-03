@@ -1,4 +1,4 @@
-export type ToolName = "claude" | "codex";
+export type ToolName = "claude" | "codex" | "agents";
 export type Category = "skills" | "mcp" | "hooks" | "rules" | "agents" | "plugins" | "workflows" | "tools";
 export type ItemKind = "path" | "config-entry" | "session-derived";
 

@@ -30,7 +30,7 @@ export function ExportDialog({
   const [saveHandle, setSaveHandle] = React.useState<FileSystemFileHandle | null>(null);
   const exportableItems = React.useMemo(() => items.filter((item) => item.kind !== "session-derived"), [items]);
   const [selected, setSelected] = React.useState<Set<string>>(() => new Set(exportableItems.map((item) => item.id)));
-  const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set(["tool:claude", "tool:codex"]));
+  const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set(["tool:claude", "tool:codex", "tool:agents"]));
 
   const supportsFilePicker = typeof window !== "undefined" && typeof (window as any).showSaveFilePicker === "function";
 

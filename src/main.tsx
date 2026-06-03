@@ -482,7 +482,7 @@ function App() {
                 <h1 className="text-[15px] font-semibold tracking-tightish text-foreground">Skill Toggle</h1>
                 <span className="rounded-full bg-muted px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-muted-foreground">v1</span>
               </div>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">Inventory across Claude Code &amp; Codex</p>
+              <p className="mt-0.5 text-[11px] text-muted-foreground">Inventory across Claude Code, Codex &amp; Agents</p>
             </div>
           </div>
 
@@ -495,6 +495,8 @@ function App() {
               <StatPill label="Claude" value={formatNumber(toolTotals.claude ?? 0)} />
               <StatDivider />
               <StatPill label="Codex" value={formatNumber(toolTotals.codex ?? 0)} />
+              <StatDivider />
+              <StatPill label="Agents" value={formatNumber(toolTotals.agents ?? 0)} />
               <StatDivider />
               <StatPill label="Uses" value={formatNumber(usageTotal)} />
               <StatDivider />
@@ -578,7 +580,7 @@ function App() {
 
           <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80">Tool</div>
           <div className="mb-3 flex rounded-md border border-border bg-card p-0.5 card-edge">
-            {(["all", "claude", "codex"] as const).map((key) => (
+            {(["all", "claude", "codex", "agents"] as const).map((key) => (
               <button
                 key={key}
                 type="button"
@@ -589,7 +591,7 @@ function App() {
                     : "text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {key === "all" ? "All" : key === "claude" ? "Claude" : "Codex"}
+                {key === "all" ? "All" : key === "claude" ? "Claude" : key === "codex" ? "Codex" : "Agents"}
               </button>
             ))}
           </div>
@@ -843,7 +845,7 @@ function App() {
                                   {invalid ? item.invalidReason ?? "Skill is invalid" : item.description}
                                 </div>
                                 <div className="mt-1.5 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/80">
-                                  <span>{item.tool === "claude" ? "Claude" : "Codex"}</span>
+                                  <span>{item.tool === "claude" ? "Claude" : item.tool === "codex" ? "Codex" : "Agents"}</span>
                                   <span className="text-muted-foreground/40">·</span>
                                   <span>{item.category}</span>
                                   <span className="text-muted-foreground/40">·</span>

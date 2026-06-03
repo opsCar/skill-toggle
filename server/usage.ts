@@ -130,7 +130,7 @@ export function getContextProbe(items: InventoryItem[], prompt = "hello") {
       "Hidden system prompts, live conversation history, automatic repository scans, and model-side tool schemas are not included.",
       "Only currently enabled items are counted in the baseline."
     ],
-    tools: (["claude", "codex"] as const).map((tool) => probeForTool(tool, items, promptStats.estimatedTokens))
+    tools: (["claude", "codex", "agents"] as const).map((tool) => probeForTool(tool, items, promptStats.estimatedTokens))
   };
 }
 
