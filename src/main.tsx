@@ -18,6 +18,7 @@ import {
   Sparkles,
   Upload,
   UsersRound,
+  Workflow,
   Wrench,
   X
 } from "lucide-react";
@@ -59,7 +60,8 @@ const categories: Array<{ key: Category | "all"; label: string; icon: React.Elem
   { key: "hooks", label: "Hooks", icon: Code2 },
   { key: "rules", label: "Rules", icon: ShieldCheck },
   { key: "agents", label: "Agents", icon: UsersRound },
-  { key: "plugins", label: "Plugins", icon: Plug }
+  { key: "plugins", label: "Plugins", icon: Plug },
+  { key: "workflows", label: "Workflows", icon: Workflow }
 ];
 
 const INVENTORY_ROW_HEIGHT = 86;
@@ -125,7 +127,8 @@ function App() {
       if (!response.ok) throw new Error(data.error ?? "Inventory failed");
       setItems(data.items);
       void loadUsage();
-      void loadStartupProbe();
+      // Startup probe hidden for now — not ready. Re-enable with the panel below.
+      // void loadStartupProbe();
       if (!selectedRef.current && data.items.length > 0) void loadDetail(data.items[0].id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unable to load inventory");
@@ -573,7 +576,8 @@ function App() {
             ) : null}
           </div>
 
-          <div className="mb-2 flex rounded-md border border-border bg-card p-0.5 card-edge">
+          <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80">Tool</div>
+          <div className="mb-3 flex rounded-md border border-border bg-card p-0.5 card-edge">
             {(["all", "claude", "codex"] as const).map((key) => (
               <button
                 key={key}
@@ -590,6 +594,7 @@ function App() {
             ))}
           </div>
 
+          <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80">Origin</div>
           <div className="mb-5 flex rounded-md border border-border bg-card p-0.5 card-edge" title="Built-in tools ship with the CLI (Anthropic/Codex); custom items are user-installed.">
             {(["all", "builtin", "custom"] as const).map((key) => (
               <button
@@ -633,7 +638,8 @@ function App() {
               );
             })}
           </nav>
-          <StartupProbePanel probe={startupProbe} activeTool={tool} loading={contextProbeLoading} onRefresh={() => void loadStartupProbe()} />
+          {/* Startup probe hidden for now — not ready.
+          <StartupProbePanel probe={startupProbe} activeTool={tool} loading={contextProbeLoading} onRefresh={() => void loadStartupProbe()} /> */}
         </aside>
 
         <section className="min-w-0">
@@ -659,14 +665,15 @@ function App() {
               ) : null}
               <span className="font-mono text-[10px] tabular-nums text-muted-foreground/70">{filtered.length}</span>
             </label>
-            <div className="grid gap-2 sm:grid-cols-[auto_1fr]">
-              <div className="flex h-9 items-center gap-1 rounded-md border border-border bg-card p-1 card-edge">
+            <div className="flex h-9 min-w-0 items-center gap-2 rounded-md border border-border bg-card pl-3 pr-2 card-edge transition-colors focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-ring/20">
+              <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Filter by uses</span>
+              <div className="flex shrink-0 items-center gap-0.5 rounded-[6px] border border-border bg-background/60 p-0.5">
                 {(["lt", "eq", "gt"] as const).map((key) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => setUsageOperator(key)}
-                    className={`flex h-7 min-w-7 items-center justify-center rounded-[5px] px-2 font-mono text-[12px] transition-colors press ${
+                    className={`flex h-6 min-w-6 items-center justify-center rounded-[4px] px-1.5 font-mono text-[12px] transition-colors press ${
                       usageOperator === key ? "bg-foreground text-background" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                     }`}
                     aria-label={key === "lt" ? "Usage less than" : key === "eq" ? "Usage equal to" : "Usage greater than"}
@@ -675,28 +682,25 @@ function App() {
                   </button>
                 ))}
               </div>
-              <label className="flex h-9 min-w-0 items-center gap-2 rounded-md border border-border bg-card px-3 transition-colors focus-within:border-foreground/30 focus-within:ring-2 focus-within:ring-ring/20">
-                <span className="shrink-0 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Usage</span>
-                <input
-                  aria-label="Usage filter number"
-                  className="min-w-0 flex-1 bg-transparent font-mono text-[12.5px] outline-none placeholder:text-muted-foreground/60"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  value={usageValue}
-                  onChange={(event) => setUsageValue(event.target.value)}
-                  placeholder="number"
-                />
-                {usageValue ? (
-                  <button
-                    type="button"
-                    onClick={clearUsageFilter}
-                    className="rounded p-0.5 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
-                    aria-label="Clear usage filter"
-                  >
-                    <X className="size-3" strokeWidth={2} />
-                  </button>
-                ) : null}
-              </label>
+              <input
+                aria-label="Usage filter number"
+                className="min-w-0 flex-1 bg-transparent font-mono text-[12.5px] outline-none placeholder:text-muted-foreground/60"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={usageValue}
+                onChange={(event) => setUsageValue(event.target.value)}
+                placeholder="any count"
+              />
+              {usageValue ? (
+                <button
+                  type="button"
+                  onClick={clearUsageFilter}
+                  className="shrink-0 rounded p-0.5 text-muted-foreground/60 hover:bg-muted hover:text-foreground"
+                  aria-label="Clear usage filter"
+                >
+                  <X className="size-3" strokeWidth={2} />
+                </button>
+              ) : null}
             </div>
           </div>
           {error ? <div className="mb-3 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">{error}</div> : null}

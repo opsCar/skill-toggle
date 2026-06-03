@@ -153,6 +153,7 @@ const pathSources: Record<ToolName, Record<Category, string[]>> = {
     ],
     agents: [path.join(claudeConfigRoot, "agents"), path.join(projectRoot, ".claude", "agents")],
     plugins: [path.join(claudeConfigRoot, "plugins"), path.join(projectRoot, ".claude", "plugins")],
+    workflows: [path.join(claudeConfigRoot, "workflows"), path.join(projectRoot, ".claude", "workflows")],
     tools: []
   },
   codex: {
@@ -168,6 +169,8 @@ const pathSources: Record<ToolName, Record<Category, string[]>> = {
     ],
     agents: [path.join(codexConfigRoot, "agents"), path.join(home, ".agents"), path.join(projectRoot, ".codex", "agents")],
     plugins: [path.join(codexConfigRoot, "plugins"), path.join(projectRoot, ".codex", "plugins")],
+    // Dynamic workflows are a Claude Code feature; Codex has no equivalent.
+    workflows: [],
     tools: []
   }
 };
@@ -301,7 +304,7 @@ async function collectConfigItems() {
 
 export async function listInventory() {
   const activePathItems = await Promise.all(
-    (["claude", "codex"] as const).flatMap((tool) => (["skills", "mcp", "hooks", "rules", "agents", "plugins"] as const).map((category) => collectPathItems(tool, category)))
+    (["claude", "codex"] as const).flatMap((tool) => (["skills", "mcp", "hooks", "rules", "agents", "plugins", "workflows"] as const).map((category) => collectPathItems(tool, category)))
   );
   const disabledPathItems = await Promise.all((["claude", "codex"] as const).map(collectDisabledPathItems));
   const configItems = await collectConfigItems();
@@ -640,8 +643,64 @@ export async function getDetail(id: string): Promise<ItemDetail | undefined> {
     return { ...item, detail, detailType: "json" };
   }
   const target = item.enabled ? item.path! : item.backupPath!;
+  if (item.category === "workflows") {
+    return { ...item, ...(await describeWorkflow(target, item.name)) };
+  }
   const detail = await describePath(target);
   return { ...item, ...detail };
+}
+
+// Dynamic workflows are JavaScript files that orchestrate subagents (each with
+// its own context window) to build a task-specific harness on the fly. See:
+// https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code
+// There is no manifest, so detail is derived from the source: a leading
+// description comment plus the workflow body shown verbatim.
+async function describeWorkflow(target: string, name: string): Promise<{ detail: string; detailType: "markdown" | "text" }> {
+  let stat;
+  try {
+    stat = await fs.stat(target);
+  } catch {
+    return { detail: `${target}\n\nWorkflow file is unreadable.`, detailType: "text" };
+  }
+  // A workflow can also ship as a directory (e.g. bundled inside a skill); fall
+  // back to the generic describer in that case.
+  if (stat.isDirectory()) return describePath(target);
+
+  const source = await safeRead(target);
+  const description = leadingCommentText(source);
+  const lines = source ? source.split(/\r?\n/).length : 0;
+  const header = [
+    `# ${name}`,
+    "",
+    `- Type: dynamic workflow (JavaScript harness)`,
+    `- File: \`${target}\``,
+    `- Size: ${lines} line${lines === 1 ? "" : "s"}`,
+    description ? `\n## Description\n\n${description}` : "\n_No leading description comment found._"
+  ].join("\n");
+  return { detail: `${header}\n\n## Source\n\n\`\`\`js\n${source.trimEnd()}\n\`\`\`\n`, detailType: "markdown" };
+}
+
+// Pull human-readable text from the first leading comment of a JS file — either
+// a /** ... */ block or a run of // lines at the top — stripping comment syntax.
+function leadingCommentText(source: string): string | undefined {
+  const trimmed = source.replace(/^﻿/, "").trimStart();
+  const block = trimmed.match(/^\/\*\*?([\s\S]*?)\*\//);
+  if (block) {
+    const text = block[1]
+      .split(/\r?\n/)
+      .map((line) => line.replace(/^\s*\*?\s?/, "").trimEnd())
+      .join("\n")
+      .trim();
+    return text || undefined;
+  }
+  const lineComments: string[] = [];
+  for (const line of trimmed.split(/\r?\n/)) {
+    const match = line.match(/^\s*\/\/\s?(.*)$/);
+    if (!match) break;
+    lineComments.push(match[1].trimEnd());
+  }
+  const text = lineComments.join("\n").trim();
+  return text || undefined;
 }
 
 async function describeSessionDerived(item: InventoryItem): Promise<string> {

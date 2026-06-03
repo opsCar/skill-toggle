@@ -1,5 +1,5 @@
 export type ToolName = "claude" | "codex";
-export type Category = "skills" | "mcp" | "hooks" | "rules" | "agents" | "plugins" | "tools";
+export type Category = "skills" | "mcp" | "hooks" | "rules" | "agents" | "plugins" | "workflows" | "tools";
 
 export interface InventoryItem {
   id: string;
@@ -48,6 +48,7 @@ export interface UsageStats {
   rule: number;
   agent: number;
   plugin: number;
+  workflow: number;
   lastUsed?: string;
   evidence: string[];
 }
@@ -110,7 +111,8 @@ export const CATEGORY_LABELS: Record<Category, string> = {
   hooks: "Hooks",
   rules: "Rules",
   agents: "Agents",
-  plugins: "Plugins"
+  plugins: "Plugins",
+  workflows: "Workflows"
 };
 
-export const CATEGORY_ORDER: Category[] = ["skills", "tools", "agents", "plugins", "mcp", "hooks", "rules"];
+export const CATEGORY_ORDER: Category[] = ["skills", "tools", "agents", "plugins", "workflows", "mcp", "hooks", "rules"];

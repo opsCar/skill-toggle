@@ -15,11 +15,12 @@ export interface UsageStats {
   rule: number;
   agent: number;
   plugin: number;
+  workflow: number;
   lastUsed?: string;
   evidence: string[];
 }
 
-type UsageKind = "skill" | "mcp" | "hook" | "tool" | "rule" | "agent" | "plugin";
+type UsageKind = "skill" | "mcp" | "hook" | "tool" | "rule" | "agent" | "plugin" | "workflow";
 type UsageSource = "claude" | "codex";
 
 interface UsageEvent {
@@ -99,6 +100,7 @@ const emptyStats = (): UsageStats => ({
   rule: 0,
   agent: 0,
   plugin: 0,
+  workflow: 0,
   evidence: []
 });
 
@@ -144,7 +146,7 @@ export async function getStartupProbe() {
 
 function probeForTool(tool: ToolName, items: InventoryItem[], promptTokens: number): ContextProbeTool {
   const enabled = items.filter((item) => item.tool === tool && item.enabled);
-  const breakdown = (["skills", "agents", "plugins", "mcp", "hooks", "rules", "tools"] as const)
+  const breakdown = (["skills", "agents", "plugins", "workflows", "mcp", "hooks", "rules", "tools"] as const)
     .map((category) => {
       const categoryItems = enabled.filter((item) => item.category === category);
       return {
@@ -543,6 +545,7 @@ function kindForCategory(category: Category): UsageKind {
   if (category === "rules") return "rule";
   if (category === "agents") return "agent";
   if (category === "plugins") return "plugin";
+  if (category === "workflows") return "workflow";
   if (category === "tools") return "tool";
   return "tool";
 }

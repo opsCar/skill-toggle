@@ -1,5 +1,5 @@
 export type ToolName = "claude" | "codex";
-export type Category = "skills" | "mcp" | "hooks" | "rules" | "agents" | "plugins" | "tools";
+export type Category = "skills" | "mcp" | "hooks" | "rules" | "agents" | "plugins" | "workflows" | "tools";
 export type ItemKind = "path" | "config-entry" | "session-derived";
 
 export interface InventoryItem {
