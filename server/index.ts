@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { appendImportArchive, applyImportArchive, inspectImportArchive, writeExportArchive } from "./archive";
 import { getDetail, listInventory, toggleItem } from "./discovery";
 import { getContextProbe, getStartupProbe, getUsageSummary } from "./usage";
+import { createDiagnosticsRun, diagnosticsCapabilities, getDiagnosticsRun, listDiagnosticsRuns, type OverlapMethod } from "./diagnostics";
 
 const app = express();
 const port = Number(process.env.PORT ?? process.env.SKILL_TOGGLE_API_PORT ?? 4127);
@@ -70,6 +71,50 @@ app.post("/api/items/:id/toggle", async (req, res, next) => {
   try {
     const item = await toggleItem(req.params.id, Boolean(req.body?.enabled));
     res.json({ item });
+  } catch (error) {
+    next(error);
+  }
+});
+
+const OVERLAP_METHODS: OverlapMethod[] = ["lexical", "semantic", "llm"];
+
+app.get("/api/diagnostics/capabilities", async (_req, res, next) => {
+  try {
+    res.json({ methods: await diagnosticsCapabilities() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/diagnostics/runs", async (_req, res, next) => {
+  try {
+    res.json({ runs: await listDiagnosticsRuns() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/diagnostics/runs/:id", async (req, res, next) => {
+  try {
+    const run = await getDiagnosticsRun(req.params.id);
+    if (!run) {
+      res.status(404).json({ error: "Run not found" });
+      return;
+    }
+    res.json(run);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/diagnostics/runs", async (req, res, next) => {
+  try {
+    const method = (req.body ?? {}).overlapMethod as unknown;
+    if (typeof method !== "string" || !OVERLAP_METHODS.includes(method as OverlapMethod)) {
+      res.status(400).json({ error: `overlapMethod must be one of ${OVERLAP_METHODS.join(", ")}` });
+      return;
+    }
+    res.json(await createDiagnosticsRun(method as OverlapMethod));
   } catch (error) {
     next(error);
   }

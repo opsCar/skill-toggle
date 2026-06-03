@@ -4,7 +4,7 @@ import os from "node:os";
 import crypto from "node:crypto";
 import { parse, stringify } from "smol-toml";
 import type { Category, ConfigEntryMeta, ContextStats, InventoryItem, ItemDetail, PathItemMeta, ToolName } from "./types";
-import { contextForText, emptyContextStats, exists, safeRead, walkFiles } from "./shared";
+import { contextForText, emptyContextStats, exists, parseFrontmatterDescription, safeRead, walkFiles } from "./shared";
 
 const home = os.homedir();
 const projectRoot = process.env.SKILL_TOGGLE_PROJECT_ROOT ?? process.cwd();
@@ -52,7 +52,8 @@ function pathItem(
   enabled: boolean,
   backupPath?: string,
   validity?: { valid: boolean; invalidReason?: string },
-  context: ContextStats = emptyContextStats()
+  context: ContextStats = emptyContextStats(),
+  routingDescription?: string
 ): InventoryItem {
   const name = labelFromPath(target);
   return {
@@ -63,6 +64,7 @@ function pathItem(
     name,
     enabled,
     source,
+    routingDescription,
     path: enabled ? target : undefined,
     backupPath,
     // File-backed items always live in user/project config dirs, so they are
@@ -201,13 +203,27 @@ async function collectPathItems(tool: ToolName, category: Category) {
         if (child.name.startsWith(".")) continue;
         const childPath = path.join(sourcePath, child.name);
         const validity = category === "skills" ? await validateSkill(childPath) : undefined;
-        items.push(pathItem(tool, category, childPath, sourcePath, true, undefined, validity, await contextForPath(childPath)));
+        items.push(pathItem(tool, category, childPath, sourcePath, true, undefined, validity, await contextForPath(childPath), await routingDescriptionForPath(category, childPath)));
       }
     } else {
-      items.push(pathItem(tool, category, sourcePath, path.dirname(sourcePath), true, undefined, undefined, await contextForPath(sourcePath)));
+      items.push(pathItem(tool, category, sourcePath, path.dirname(sourcePath), true, undefined, undefined, await contextForPath(sourcePath), await routingDescriptionForPath(category, sourcePath)));
     }
   }
   return items;
+}
+
+// Skills and agents carry a frontmatter `description` (their routing text). For
+// a directory the manifest is SKILL.md; for a single-file agent it is the file
+// itself. Other categories have no routing description.
+async function routingDescriptionForPath(category: Category, target: string): Promise<string | undefined> {
+  if (category !== "skills" && category !== "agents") return undefined;
+  let manifest = target;
+  try {
+    if ((await fs.stat(target)).isDirectory()) manifest = path.join(target, "SKILL.md");
+  } catch {
+    return undefined;
+  }
+  return parseFrontmatterDescription(await safeRead(manifest));
 }
 
 async function collectDisabledPathItems(tool: ToolName) {
@@ -219,7 +235,7 @@ async function collectDisabledPathItems(tool: ToolName) {
     try {
       const meta = JSON.parse(await fs.readFile(metaPath, "utf8")) as PathItemMeta;
       const validity = meta.category === "skills" ? await validateSkill(meta.payloadPath) : undefined;
-      rows.push(pathItem(meta.tool, meta.category, meta.originalPath, meta.source, false, meta.payloadPath, validity, await contextForPath(meta.payloadPath)));
+      rows.push(pathItem(meta.tool, meta.category, meta.originalPath, meta.source, false, meta.payloadPath, validity, await contextForPath(meta.payloadPath), await routingDescriptionForPath(meta.category, meta.payloadPath)));
     } catch {
       // Ignore malformed backup records; they are surfaced by filesystem inspection if restored manually.
     }

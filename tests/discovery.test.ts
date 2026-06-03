@@ -110,6 +110,23 @@ test("lists and toggles MCP config entries", async () => {
   expect(await fs.readFile(configPath, "utf8")).toContain("demo");
 });
 
+test("exposes frontmatter description as routingDescription for skills and agents", async () => {
+  const skillFile = path.join(tmp, ".claude", "skills", "planner", "SKILL.md");
+  const agentFile = path.join(tmp, ".claude", "agents", "reviewer.md");
+  await fs.mkdir(path.dirname(skillFile), { recursive: true });
+  await fs.mkdir(path.dirname(agentFile), { recursive: true });
+  await fs.writeFile(skillFile, "---\nname: planner\ndescription: Plan multi-step work before coding.\n---\nBody.\n");
+  await fs.writeFile(agentFile, "---\nname: reviewer\ndescription: Reviews diffs for correctness.\n---\nReview.\n");
+
+  const { listInventory } = await import("../server/discovery");
+  const items = await listInventory();
+  const skill = items.find((row) => row.tool === "claude" && row.category === "skills" && row.name === "planner");
+  const agent = items.find((row) => row.tool === "claude" && row.category === "agents" && row.name === "reviewer");
+
+  expect(skill?.routingDescription).toBe("Plan multi-step work before coding.");
+  expect(agent?.routingDescription).toBe("Reviews diffs for correctness.");
+});
+
 test("lists Claude MCP entries from global state and project .mcp.json", async () => {
   const projectDir = path.join(tmp, "project");
   await fs.mkdir(projectDir, { recursive: true });

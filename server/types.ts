@@ -10,6 +10,8 @@ export interface InventoryItem {
   name: string;
   enabled: boolean;
   description: string;
+  /** Frontmatter `description` for skills/agents — the routing text that competes to trigger them. */
+  routingDescription?: string;
   source: string;
   path?: string;
   backupPath?: string;

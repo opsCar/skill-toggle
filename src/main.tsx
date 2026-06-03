@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Stethoscope,
   Upload,
   UsersRound,
   Workflow,
@@ -27,6 +28,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
 import { ExportDialog } from "@/components/ExportDialog";
 import { ImportDialog } from "@/components/ImportDialog";
+import { DiagnosticsDialog } from "@/components/DiagnosticsDialog";
 import { StartupProbePanel } from "@/components/StartupProbePanel";
 import { Field, StatDivider, StatPill, TriCheckbox } from "@/components/primitives";
 import {
@@ -87,6 +89,7 @@ function App() {
   const [startupProbe, setStartupProbe] = React.useState<StartupProbe | null>(null);
   const [contextProbeLoading, setContextProbeLoading] = React.useState(false);
   const [exportOpen, setExportOpen] = React.useState(false);
+  const [diagnosticsOpen, setDiagnosticsOpen] = React.useState(false);
   const [exportProgress, setExportProgress] = React.useState<number | null>(null);
   const [importProgress, setImportProgress] = React.useState<number | null>(null);
   const [importFile, setImportFile] = React.useState<File | null>(null);
@@ -164,6 +167,33 @@ function App() {
       setError(err instanceof Error ? err.message : "Startup probe failed");
     } finally {
       setContextProbeLoading(false);
+    }
+  }
+
+  async function disableManyItems(targets: InventoryItem[]) {
+    const list = targets.filter((item) => item.enabled && item.kind !== "session-derived");
+    if (list.length === 0) return;
+    setBusy(true);
+    setError("");
+    setStatus(`Disabling ${list.length} item${list.length === 1 ? "" : "s"} from diagnostics…`);
+    try {
+      for (const item of list) {
+        const response = await fetch(`/api/items/${item.id}/toggle`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: false })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error ?? `Failed to disable ${item.name}`);
+      }
+      setStatus(`Disabled ${list.length} item${list.length === 1 ? "" : "s"} from diagnostics.`);
+      await loadItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Bulk disable failed");
+      setStatus("");
+      await loadItems();
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -506,6 +536,16 @@ function App() {
 
           <div className="flex items-center gap-2">
             <input ref={importInputRef} type="file" accept=".tar.gz,.tgz,application/gzip,application/x-gzip" className="hidden" onChange={onImportPicked} aria-label="Import archive file" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDiagnosticsOpen(true)}
+              disabled={loading}
+              className="h-9 px-3"
+            >
+              <Stethoscope className="size-3.5" strokeWidth={1.75} />
+              <span className="font-mono text-[12px]">Diagnostics</span>
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -1002,6 +1042,19 @@ function App() {
           items={items}
           onCancel={() => setExportOpen(false)}
           onExport={(selection) => void runExport(selection)}
+        />
+      ) : null}
+      {diagnosticsOpen ? (
+        <DiagnosticsDialog
+          items={items}
+          busy={busy}
+          onClose={() => setDiagnosticsOpen(false)}
+          onToggleItem={(item, enabled) => toggleItem(item, enabled)}
+          onDisableMany={(targets) => disableManyItems(targets)}
+          onInspect={(id) => {
+            setDiagnosticsOpen(false);
+            void loadDetail(id);
+          }}
         />
       ) : null}
       {importFile ? (

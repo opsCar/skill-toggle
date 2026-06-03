@@ -9,6 +9,8 @@ export interface InventoryItem {
   name: string;
   enabled: boolean;
   description: string;
+  /** Frontmatter `description` for skills/agents — the routing text that competes to trigger them. */
+  routingDescription?: string;
   source: string;
   path?: string;
   backupPath?: string;
@@ -92,6 +94,74 @@ export interface StartupProbe {
   note: string;
   tools: StartupProbeTool[];
 }
+
+export type OverlapMethod = "lexical" | "semantic" | "llm";
+export type Severity = "high" | "medium" | "low";
+
+export interface FindingItemRef {
+  id: string;
+  name: string;
+  tool: ToolName;
+  category: Category;
+  builtin: boolean;
+}
+
+export interface FindingAction {
+  type: "inspect" | "disable";
+  itemId: string;
+  label: string;
+}
+
+export interface Finding {
+  id: string;
+  ruleId: string;
+  severity: Severity;
+  title: string;
+  detail: string;
+  items: FindingItemRef[];
+  metrics: Record<string, number | string>;
+  actions: FindingAction[];
+  score: number;
+}
+
+export interface DiagnosticRunSummary {
+  id: string;
+  createdAt: string;
+  overlapMethod: OverlapMethod;
+  counts: Record<Severity, number>;
+}
+
+export interface LlmUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+  costUsd?: number;
+  durationMs?: number;
+}
+
+export interface LlmTrace {
+  prompt: string;
+  response: string;
+  usage?: LlmUsage;
+}
+
+export interface DiagnosticRun extends DiagnosticRunSummary {
+  findings: Finding[];
+  llmTrace?: LlmTrace;
+}
+
+export interface DiagnosticsCapability {
+  method: OverlapMethod;
+  available: boolean;
+  reason?: string;
+}
+
+export const OVERLAP_METHOD_LABELS: Record<OverlapMethod, string> = {
+  lexical: "Lexical",
+  semantic: "Semantic",
+  llm: "LLM"
+};
 
 export interface ExportSelection {
   filename: string;

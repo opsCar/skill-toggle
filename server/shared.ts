@@ -63,3 +63,16 @@ export function contextForText(text: string): ContextStats {
 export function emptyContextStats(): ContextStats {
   return contextForText("");
 }
+
+/**
+ * Pull the `description` field from a markdown file's YAML frontmatter. Used for
+ * the routing descriptions skills and agents carry (the text that competes to
+ * trigger them). Returns undefined when there is no frontmatter or no field.
+ */
+export function parseFrontmatterDescription(content: string): string | undefined {
+  const frontmatter = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!frontmatter) return undefined;
+  const line = frontmatter[1].match(/^description:\s*(.+)$/m);
+  if (!line) return undefined;
+  return line[1].trim().replace(/^["']|["']$/g, "") || undefined;
+}
