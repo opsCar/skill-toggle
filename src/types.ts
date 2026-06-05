@@ -95,6 +95,124 @@ export interface StartupProbe {
   tools: StartupProbeTool[];
 }
 
+export interface ClaudeTapSourceInfo {
+  available: boolean;
+  dbPath: string;
+  schemaVersion?: number;
+  sizeBytes?: number;
+  tables: string[];
+  sessionCount: number;
+  recordCount: number;
+  warning?: string;
+}
+
+export interface ClaudeTapSession {
+  id: string;
+  startedAt: string;
+  updatedAt: string;
+  date: string;
+  client: string;
+  agent: string;
+  agentKey: string;
+  proxyMode: string;
+  status: string;
+  active: boolean;
+  live: boolean;
+  model: string;
+  workspace?: string;
+  recordCount: number;
+  turnCount: number;
+  durationMs: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreateTokens: number;
+  totalTokens: number;
+  cost: ClaudeTapCostEstimate;
+  firstUser: string;
+  lastResponse: string;
+  error: string;
+  skillActivity: ClaudeTapSkillActivity;
+  legacyRelPath?: string;
+}
+
+export interface ClaudeTapSkillSignal {
+  name: string;
+  description?: string;
+  count: number;
+  evidence: string[];
+}
+
+export interface ClaudeTapSkillActivity {
+  loadedCount: number;
+  mentionedCount: number;
+  loadedSkills: ClaudeTapSkillSignal[];
+  mentionedSkills: ClaudeTapSkillSignal[];
+}
+
+export interface ClaudeTapBudgetSummary {
+  sessions: number;
+  records: number;
+  durationMs: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreateTokens: number;
+  totalTokens: number;
+  uncachedInputTokens: number;
+  cacheReadRatio: number;
+  avgTokensPerSession: number;
+  estimatedCostUsd: number;
+  pricedSessions: number;
+  unpricedSessions: number;
+}
+
+export interface ClaudeTapBreakdownRow {
+  key: string;
+  sessions: number;
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreateTokens: number;
+  durationMs: number;
+  estimatedCostUsd: number;
+}
+
+export interface ClaudeTapModelPricing {
+  model: string;
+  provider: "openai" | "anthropic";
+  inputPerMTok: number;
+  cachedInputPerMTok?: number;
+  cacheWritePerMTok?: number;
+  outputPerMTok: number;
+  source: string;
+}
+
+export interface ClaudeTapCostEstimate {
+  estimatedUsd: number;
+  inputUsd: number;
+  cachedInputUsd: number;
+  cacheWriteUsd: number;
+  outputUsd: number;
+  pricing?: ClaudeTapModelPricing;
+  pricingStatus: "priced" | "unknown-model";
+}
+
+export interface ClaudeTapOverview {
+  generatedAt: string;
+  source: ClaudeTapSourceInfo;
+  budget: ClaudeTapBudgetSummary;
+  sessions: ClaudeTapSession[];
+  byAgent: ClaudeTapBreakdownRow[];
+  byModel: ClaudeTapBreakdownRow[];
+  pricing: {
+    generatedAt: string;
+    note: string;
+    sources: Array<{ provider: string; url: string; checkedAt: string }>;
+  };
+}
+
 export type OverlapMethod = "lexical" | "semantic" | "llm";
 export type Severity = "high" | "medium" | "low";
 

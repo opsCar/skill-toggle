@@ -13,6 +13,7 @@ import {
   Plug,
   RefreshCw,
   Search,
+  Database,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -29,6 +30,7 @@ import { Switch } from "@/components/ui/switch";
 import { ExportDialog } from "@/components/ExportDialog";
 import { ImportDialog } from "@/components/ImportDialog";
 import { DiagnosticsDialog } from "@/components/DiagnosticsDialog";
+import { SessionExplorerPage } from "@/components/SessionExplorerPage";
 import { StartupProbePanel } from "@/components/StartupProbePanel";
 import { Field, StatDivider, StatPill, TriCheckbox } from "@/components/primitives";
 import {
@@ -70,11 +72,13 @@ const INVENTORY_ROW_HEIGHT = 86;
 const INVENTORY_OVERSCAN = 8;
 
 function App() {
+  const isSessionRoute = window.location.pathname === "/sessions";
   const [items, setItems] = React.useState<InventoryItem[]>([]);
   const [selected, setSelected] = React.useState<ItemDetail | null>(null);
   const [category, setCategory] = React.useState<Category | "all">("all");
   const [tool, setTool] = React.useState<ToolName | "all">("all");
   const [origin, setOrigin] = React.useState<"all" | "builtin" | "custom">("all");
+  const [enabledStatus, setEnabledStatus] = React.useState<"all" | "on" | "off">("all");
   const [query, setQuery] = React.useState("");
   const [selectedListIds, setSelectedListIds] = React.useState<Set<string>>(new Set());
   const [usageOperator, setUsageOperator] = React.useState<"lt" | "eq" | "gt">("eq");
@@ -213,10 +217,12 @@ function App() {
   }
 
   React.useEffect(() => {
+    if (isSessionRoute) return;
     void loadItems();
-  }, []);
+  }, [isSessionRoute, loadItems]);
 
   React.useEffect(() => {
+    if (isSessionRoute) return;
     const viewport = inventoryViewportRef.current;
     if (!viewport) return;
     const updateHeight = () => setInventoryViewportHeight(viewport.clientHeight);
@@ -224,7 +230,7 @@ function App() {
     const observer = new ResizeObserver(updateHeight);
     observer.observe(viewport);
     return () => observer.disconnect();
-  }, []);
+  }, [isSessionRoute]);
 
   async function runExport(options: { filename: string; itemIds: string[]; saveHandle?: FileSystemFileHandle | null }) {
     setExportOpen(false);
@@ -386,6 +392,7 @@ function App() {
       const matchesCategory = category === "all" || item.category === category;
       const matchesTool = tool === "all" || item.tool === tool;
       const matchesOrigin = origin === "all" || (origin === "builtin" ? item.builtin : !item.builtin);
+      const matchesStatus = enabledStatus === "all" || (enabledStatus === "on" ? item.enabled : !item.enabled);
       const haystack = `${item.name} ${item.description} ${item.source}`.toLowerCase();
       const usageTotal = usageById[item.id]?.total ?? 0;
       const matchesUsage =
@@ -393,7 +400,7 @@ function App() {
         (usageOperator === "lt" && usageTotal < usageNumber!) ||
         (usageOperator === "eq" && usageTotal === usageNumber!) ||
         (usageOperator === "gt" && usageTotal > usageNumber!);
-      return matchesCategory && matchesTool && matchesOrigin && matchesUsage && haystack.includes(query.toLowerCase());
+      return matchesCategory && matchesTool && matchesOrigin && matchesStatus && matchesUsage && haystack.includes(query.toLowerCase());
     });
 
     return filteredItems.slice().sort((a, b) => {
@@ -404,13 +411,13 @@ function App() {
       if (usageDelta !== 0) return usageDelta;
       return a.name.localeCompare(b.name);
     });
-  }, [category, hasUsageFilter, items, origin, query, tool, usageById, usageNumber, usageOperator, usageSortOrder]);
+  }, [category, enabledStatus, hasUsageFilter, items, origin, query, tool, usageById, usageNumber, usageOperator, usageSortOrder]);
   React.useEffect(() => {
     const viewport = inventoryViewportRef.current;
     if (!viewport) return;
     viewport.scrollTop = 0;
     setInventoryScrollTop(0);
-  }, [category, tool, origin, query, usageOperator, usageValue, usageSortOrder]);
+  }, [category, tool, origin, enabledStatus, query, usageOperator, usageValue, usageSortOrder]);
 
   const visibleStart = Math.max(0, Math.floor(inventoryScrollTop / INVENTORY_ROW_HEIGHT) - INVENTORY_OVERSCAN);
   const visibleEnd = Math.min(
@@ -499,6 +506,8 @@ function App() {
   const exportProgressText = formatProgressPercent(exportProgress);
   const importProgressText = formatProgressPercent(importProgress);
 
+  if (isSessionRoute) return <SessionExplorerPage />;
+
   return (
     <main className="min-h-[100dvh]">
       <header className="sticky top-0 z-30 border-b border-border/70 bg-background/85 backdrop-blur-xl">
@@ -536,6 +545,17 @@ function App() {
 
           <div className="flex items-center gap-2">
             <input ref={importInputRef} type="file" accept=".tar.gz,.tgz,application/gzip,application/x-gzip" className="hidden" onChange={onImportPicked} aria-label="Import archive file" />
+            <Button
+              asChild
+              variant="outline"
+              size="sm"
+              className="h-9 px-3"
+            >
+              <a href="/sessions">
+                <Database className="size-3.5" strokeWidth={1.75} />
+                <span className="font-mono text-[12px]">Sessions</span>
+              </a>
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -637,7 +657,7 @@ function App() {
           </div>
 
           <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80">Origin</div>
-          <div className="mb-5 flex rounded-md border border-border bg-card p-0.5 card-edge" title="Built-in tools ship with the CLI (Anthropic/Codex); custom items are user-installed.">
+          <div className="mb-3 flex rounded-md border border-border bg-card p-0.5 card-edge" title="Built-in tools ship with the CLI (Anthropic/Codex); custom items are user-installed.">
             {(["all", "builtin", "custom"] as const).map((key) => (
               <button
                 key={key}
@@ -650,6 +670,24 @@ function App() {
                 }`}
               >
                 {key === "all" ? "All" : key === "builtin" ? "Built-in" : "Custom"}
+              </button>
+            ))}
+          </div>
+
+          <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground/80">Status</div>
+          <div className="mb-5 flex rounded-md border border-border bg-card p-0.5 card-edge" title="Filter by whether an item is currently enabled (on) or disabled (off).">
+            {(["all", "on", "off"] as const).map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setEnabledStatus(key)}
+                className={`relative flex-1 rounded-[6px] px-2 py-1.5 text-[12px] font-medium transition-all duration-150 press ${
+                  enabledStatus === key
+                    ? "bg-foreground text-background shadow-[0_1px_2px_rgba(0,0,0,0.12)]"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {key === "all" ? "All" : key === "on" ? "On" : "Off"}
               </button>
             ))}
           </div>

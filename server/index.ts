@@ -7,6 +7,7 @@ import { createReadStream, createWriteStream } from "node:fs";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { appendImportArchive, applyImportArchive, inspectImportArchive, writeExportArchive } from "./archive";
+import { getClaudeTapOverview, getClaudeTapSessionDetail } from "./claudeTap";
 import { getDetail, listInventory, toggleItem } from "./discovery";
 import { getContextProbe, getStartupProbe, getUsageSummary } from "./usage";
 import { createDiagnosticsRun, diagnosticsCapabilities, getDiagnosticsRun, listDiagnosticsRuns, type OverlapMethod } from "./diagnostics";
@@ -49,6 +50,28 @@ app.get("/api/context-probe", async (req, res, next) => {
 app.get("/api/startup-probe", async (_req, res, next) => {
   try {
     res.json(await getStartupProbe());
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/claude-tap/sessions", async (req, res, next) => {
+  try {
+    const rawLimit = typeof req.query.limit === "string" ? Number(req.query.limit) : 120;
+    res.json(await getClaudeTapOverview(Number.isFinite(rawLimit) ? rawLimit : 120));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/claude-tap/sessions/:id", async (req, res, next) => {
+  try {
+    const session = await getClaudeTapSessionDetail(req.params.id);
+    if (!session) {
+      res.status(404).json({ error: "Session not found" });
+      return;
+    }
+    res.json({ session });
   } catch (error) {
     next(error);
   }

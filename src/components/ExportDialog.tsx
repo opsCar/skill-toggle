@@ -31,12 +31,21 @@ export function ExportDialog({
   const exportableItems = React.useMemo(() => items.filter((item) => item.kind !== "session-derived"), [items]);
   const [selected, setSelected] = React.useState<Set<string>>(() => new Set(exportableItems.map((item) => item.id)));
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set(["tool:claude", "tool:codex", "tool:agents"]));
+  const [statusFilter, setStatusFilter] = React.useState<"all" | "on" | "off">("all");
 
   const supportsFilePicker = typeof window !== "undefined" && typeof (window as any).showSaveFilePicker === "function";
 
+  const visibleItems = React.useMemo(
+    () =>
+      exportableItems.filter(
+        (item) => statusFilter === "all" || (statusFilter === "on" ? item.enabled : !item.enabled)
+      ),
+    [exportableItems, statusFilter]
+  );
+
   const groups = React.useMemo(() => {
     const map = new Map<ToolName, Map<Category, InventoryItem[]>>();
-    for (const item of exportableItems) {
+    for (const item of visibleItems) {
       let toolMap = map.get(item.tool);
       if (!toolMap) {
         toolMap = new Map();
@@ -61,7 +70,7 @@ export function ExportDialog({
       );
       return { tool, categories: cats };
     });
-  }, [exportableItems]);
+  }, [visibleItems]);
 
   function setMany(ids: string[], wanted: boolean) {
     setSelected((prev) => {
@@ -166,17 +175,33 @@ export function ExportDialog({
           </div>
         </div>
 
-        <div className="flex items-center justify-between border-b border-border/70 px-5 py-2.5">
-          <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Scope · pre-selected</span>
+        <div className="flex items-center justify-between gap-3 border-b border-border/70 px-5 py-2.5">
+          <div className="flex items-center gap-2.5">
+            <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-muted-foreground">Status</span>
+            <div className="flex rounded-md border border-border bg-card p-0.5" title="Filter the scope by whether an item is currently enabled (on) or disabled (off).">
+              {(["all", "on", "off"] as const).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setStatusFilter(key)}
+                  className={`rounded-[5px] px-2 py-0.5 text-[11px] font-medium transition-colors press ${
+                    statusFilter === key ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {key === "all" ? "All" : key === "on" ? "On" : "Off"}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="flex items-center gap-2">
             <button
               type="button"
               className="rounded-md border border-border bg-card px-2 py-1 text-[11px] transition-colors press hover:bg-muted/60"
-              onClick={() => setSelected(new Set(exportableItems.map((item) => item.id)))}
+              onClick={() => setMany(visibleItems.map((item) => item.id), true)}
             >
               Select all
             </button>
-            <button type="button" className="rounded-md border border-border bg-card px-2 py-1 text-[11px] transition-colors press hover:bg-muted/60" onClick={() => setSelected(new Set())}>
+            <button type="button" className="rounded-md border border-border bg-card px-2 py-1 text-[11px] transition-colors press hover:bg-muted/60" onClick={() => setMany(visibleItems.map((item) => item.id), false)}>
               Clear
             </button>
           </div>
@@ -262,7 +287,7 @@ export function ExportDialog({
             })}
             {groups.length === 0 ? (
               <div className="rounded-md border border-dashed border-border bg-card/40 p-8 text-center text-[12.5px] text-muted-foreground">
-                No items detected in your environment.
+                {statusFilter === "all" ? "No items detected in your environment." : `No ${statusFilter === "on" ? "enabled" : "disabled"} items to export.`}
               </div>
             ) : null}
           </div>
