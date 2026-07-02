@@ -1,9 +1,9 @@
 import React from "react";
-import { ArrowLeft, Camera, Check, Layers, Pencil, Play, Plus, Search, Trash2, TriangleAlert, X } from "lucide-react";
+import { ArrowLeft, Camera, Check, ChevronRight, Layers, Pencil, Play, Plus, Search, Trash2, TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TriCheckbox } from "@/components/primitives";
-import { CATEGORY_LABELS, TOOL_LABELS, type InventoryItem, type Profile, type ProfileApplyResult } from "@/types";
+import { CATEGORY_LABELS, CATEGORY_ORDER, TOOL_LABELS, type Category, type InventoryItem, type Profile, type ProfileApplyResult } from "@/types";
 
 function formatStamp(value: string): string {
   const date = new Date(value);
@@ -381,6 +381,7 @@ function ProfileEditor({
   onSave: () => void;
 }) {
   const [query, setQuery] = React.useState("");
+  const [collapsed, setCollapsed] = React.useState<Set<Category>>(new Set());
   const filtered = React.useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return governable;
@@ -389,6 +390,25 @@ function ProfileEditor({
     );
   }, [governable, query]);
 
+  // Bucket the (filtered) items by category, honoring the canonical display order
+  // and dropping categories that have no items to show.
+  const groups = React.useMemo(() => {
+    const byCategory = new Map<Category, InventoryItem[]>();
+    for (const item of filtered) {
+      const list = byCategory.get(item.category);
+      if (list) list.push(item);
+      else byCategory.set(item.category, [item]);
+    }
+    return CATEGORY_ORDER.filter((category) => byCategory.has(category)).map((category) => ({
+      category,
+      items: byCategory.get(category)!
+    }));
+  }, [filtered]);
+
+  // While searching, force every matching group open so results are never hidden
+  // behind a collapsed header.
+  const searching = query.trim().length > 0;
+
   function setOne(id: string, checked: boolean) {
     const next = new Set(selectedIds);
     if (checked) next.add(id);
@@ -396,19 +416,29 @@ function ProfileEditor({
     onSelectedIds(next);
   }
 
-  const filteredIds = filtered.map((item) => item.id);
-  const selectedInFilter = filteredIds.filter((id) => selectedIds.has(id)).length;
-  const allState: "all" | "some" | "none" =
-    selectedInFilter === 0 ? "none" : selectedInFilter === filteredIds.length ? "all" : "some";
-
-  function setAllFiltered(checked: boolean) {
+  function setMany(ids: string[], checked: boolean) {
     const next = new Set(selectedIds);
-    for (const id of filteredIds) {
+    for (const id of ids) {
       if (checked) next.add(id);
       else next.delete(id);
     }
     onSelectedIds(next);
   }
+
+  function toggleCollapse(category: Category) {
+    const next = new Set(collapsed);
+    if (next.has(category)) next.delete(category);
+    else next.add(category);
+    setCollapsed(next);
+  }
+
+  function selectionState(ids: string[]): "all" | "some" | "none" {
+    const selected = ids.filter((id) => selectedIds.has(id)).length;
+    return selected === 0 ? "none" : selected === ids.length ? "all" : "some";
+  }
+
+  const filteredIds = filtered.map((item) => item.id);
+  const allState = selectionState(filteredIds);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -446,26 +476,68 @@ function ProfileEditor({
       </div>
       <div className="flex items-center justify-between gap-3 border-b border-border/70 bg-muted/25 px-5 py-2">
         <label className="flex items-center gap-2 text-[12px] text-muted-foreground">
-          <TriCheckbox state={allState} onChange={setAllFiltered} />
+          <TriCheckbox state={allState} onChange={(checked) => setMany(filteredIds, checked)} />
           <span>Select all shown</span>
         </label>
         <span className="font-mono text-[10.5px] uppercase tracking-[0.12em] text-muted-foreground/70">{selectedIds.size} selected</span>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-        <ul className="divide-y divide-border/70">
-          {filtered.map((item) => (
-            <li key={item.id} className="flex items-center gap-2.5 px-5 py-2">
-              <TriCheckbox state={selectedIds.has(item.id) ? "all" : "none"} onChange={(checked) => setOne(item.id, checked)} />
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[12.5px] font-medium">{item.name}</div>
-                <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/80">
-                  {TOOL_LABELS[item.tool]} · {CATEGORY_LABELS[item.category]}
-                  {item.enabled ? " · on" : ""}
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
+        {groups.length === 0 ? (
+          <div className="px-5 py-10 text-center text-[12.5px] text-muted-foreground">No items match “{query}”.</div>
+        ) : (
+          <div className="divide-y divide-border/70">
+            {groups.map(({ category, items }) => {
+              const ids = items.map((item) => item.id);
+              const groupState = selectionState(ids);
+              const selectedCount = ids.filter((id) => selectedIds.has(id)).length;
+              const open = searching || !collapsed.has(category);
+              return (
+                <section key={category}>
+                  <div className="sticky top-0 z-10 flex items-center gap-2.5 bg-muted/40 px-5 py-2 backdrop-blur-sm">
+                    <button
+                      type="button"
+                      onClick={() => toggleCollapse(category)}
+                      disabled={searching}
+                      className="flex size-5 items-center justify-center rounded text-muted-foreground transition-colors press hover:text-foreground disabled:opacity-40"
+                      aria-label={open ? `Collapse ${CATEGORY_LABELS[category]}` : `Expand ${CATEGORY_LABELS[category]}`}
+                      aria-expanded={open}
+                    >
+                      <ChevronRight className={`size-3.5 transition-transform ${open ? "rotate-90" : ""}`} strokeWidth={2} />
+                    </button>
+                    <TriCheckbox state={groupState} onChange={(checked) => setMany(ids, checked)} />
+                    <button
+                      type="button"
+                      onClick={() => toggleCollapse(category)}
+                      disabled={searching}
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                    >
+                      <span className="text-[12px] font-semibold tracking-tightish">{CATEGORY_LABELS[category]}</span>
+                      <span className="font-mono text-[10.5px] tabular-nums text-muted-foreground/70">
+                        {selectedCount}/{items.length}
+                      </span>
+                    </button>
+                  </div>
+                  {open ? (
+                    <ul className="divide-y divide-border/60">
+                      {items.map((item) => (
+                        <li key={item.id} className="flex items-center gap-2.5 py-2 pl-[52px] pr-5">
+                          <TriCheckbox state={selectedIds.has(item.id) ? "all" : "none"} onChange={(checked) => setOne(item.id, checked)} />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-[12.5px] font-medium">{item.name}</div>
+                            <div className="font-mono text-[10px] uppercase tracking-wider text-muted-foreground/80">
+                              {TOOL_LABELS[item.tool]}
+                              {item.enabled ? " · on" : ""}
+                            </div>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </section>
+              );
+            })}
+          </div>
+        )}
       </ScrollArea>
       <div className="flex items-center justify-end gap-2 border-t border-border/70 bg-muted/30 px-5 py-3">
         <Button variant="primary" disabled={busy} onClick={onSave}>
