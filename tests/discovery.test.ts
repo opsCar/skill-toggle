@@ -90,6 +90,31 @@ test("disables and restores a path item through the tool backup root", async () 
   await expect(fs.access(rulePath)).resolves.toBeUndefined();
 });
 
+test("keeps a re-created path item live and flags its stale backup instead of masking it", async () => {
+  // Disable a skill through skill-toggle (moves it into the tool backup)...
+  const skillDir = path.join(tmp, ".claude", "skills", "plan-eng-review");
+  await fs.mkdir(skillDir, { recursive: true });
+  await fs.writeFile(path.join(skillDir, "SKILL.md"), "---\nname: plan-eng-review\ndescription: Review eng plans.\n---\nBody.\n");
+
+  const { listInventory, toggleItem } = await import("../server/discovery");
+  const active = (await listInventory()).find((row) => row.category === "skills" && row.name === "plan-eng-review");
+  await toggleItem(active!.id, false);
+  await expect(fs.access(skillDir)).rejects.toThrow();
+
+  // ...then a different tool re-creates the skill on disk at the same path.
+  await fs.mkdir(skillDir, { recursive: true });
+  await fs.writeFile(path.join(skillDir, "SKILL.md"), "---\nname: plan-eng-review\ndescription: Review eng plans.\n---\nBody.\n");
+
+  // The inventory must report it as live (the CLI will load it), not disabled.
+  const reconciled = (await listInventory()).find((row) => row.category === "skills" && row.name === "plan-eng-review");
+  expect(reconciled?.enabled).toBe(true);
+  expect(reconciled?.valid).toBe(false);
+  expect(reconciled?.invalidReason).toContain("Re-enabled outside skill-toggle");
+  expect(reconciled?.backupPath).toContain(".claude_bak");
+  // Exactly one row for this item — the stale backup must not appear as a second entry.
+  expect((await listInventory()).filter((row) => row.category === "skills" && row.name === "plan-eng-review")).toHaveLength(1);
+});
+
 test("lists and toggles MCP config entries", async () => {
   const configPath = path.join(tmp, ".codex", "config.toml");
   await fs.mkdir(path.dirname(configPath), { recursive: true });
@@ -125,6 +150,22 @@ test("exposes frontmatter description as routingDescription for skills and agent
 
   expect(skill?.routingDescription).toBe("Plan multi-step work before coding.");
   expect(agent?.routingDescription).toBe("Reviews diffs for correctness.");
+});
+
+test("lists unreadable skill entries as invalid instead of throwing", async () => {
+  const skillsDir = path.join(tmp, ".codex", "skills");
+  const brokenSkill = path.join(skillsDir, "ZSDD");
+  await fs.mkdir(skillsDir, { recursive: true });
+  await fs.symlink(path.join(tmp, "missing-skill-target"), brokenSkill);
+
+  const { listInventory, getDetail } = await import("../server/discovery");
+  const items = await listInventory();
+  const skill = items.find((row) => row.tool === "codex" && row.category === "skills" && row.name === "ZSDD");
+
+  expect(skill?.valid).toBe(false);
+  expect(skill?.invalidReason).toContain("ENOENT");
+  expect(skill?.context.characters).toBe(0);
+  expect((await getDetail(skill!.id))?.detail).toContain("ZSDD");
 });
 
 test("lists Claude MCP entries from global state and project .mcp.json", async () => {

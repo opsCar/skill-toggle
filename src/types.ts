@@ -22,6 +22,41 @@ export interface InventoryItem {
   context: ContextStats;
 }
 
+export interface ProfileEntry {
+  id: string;
+  name: string;
+  tool: ToolName;
+  category: Category;
+}
+
+export interface Profile {
+  id: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Whitelist: these items should be ON; everything else governable is forced OFF. */
+  enabled: ProfileEntry[];
+}
+
+export interface ProfileApplyChange extends ProfileEntry {
+  action: "enabled" | "disabled";
+  ok: boolean;
+  error?: string;
+}
+
+export interface ProfileApplyResult {
+  profileId: string;
+  /** On dryRun these are planned changes; otherwise they are executed results. */
+  toEnable: ProfileApplyChange[];
+  toDisable: ProfileApplyChange[];
+  unchanged: number;
+  failures: ProfileApplyChange[];
+  /** Whitelist entries that are no longer present in the inventory. */
+  missing: ProfileEntry[];
+  dryRun: boolean;
+}
+
 export interface ArchiveImportItem extends InventoryItem {
   archivePath: string;
   destinationPath: string;

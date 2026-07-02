@@ -10,6 +10,7 @@ import {
   Code2,
   Download,
   FileJson,
+  Layers,
   Plug,
   RefreshCw,
   Search,
@@ -30,6 +31,7 @@ import { Switch } from "@/components/ui/switch";
 import { ExportDialog } from "@/components/ExportDialog";
 import { ImportDialog } from "@/components/ImportDialog";
 import { DiagnosticsDialog } from "@/components/DiagnosticsDialog";
+import { ProfilesDialog } from "@/components/ProfilesDialog";
 import { SessionExplorerPage } from "@/components/SessionExplorerPage";
 import { StartupProbePanel } from "@/components/StartupProbePanel";
 import { Field, StatDivider, StatPill, TriCheckbox } from "@/components/primitives";
@@ -94,6 +96,7 @@ function App() {
   const [contextProbeLoading, setContextProbeLoading] = React.useState(false);
   const [exportOpen, setExportOpen] = React.useState(false);
   const [diagnosticsOpen, setDiagnosticsOpen] = React.useState(false);
+  const [profilesOpen, setProfilesOpen] = React.useState(false);
   const [exportProgress, setExportProgress] = React.useState<number | null>(null);
   const [importProgress, setImportProgress] = React.useState<number | null>(null);
   const [importFile, setImportFile] = React.useState<File | null>(null);
@@ -559,6 +562,16 @@ function App() {
             <Button
               variant="outline"
               size="sm"
+              onClick={() => setProfilesOpen(true)}
+              disabled={loading}
+              className="h-9 px-3"
+            >
+              <Layers className="size-3.5" strokeWidth={1.75} />
+              <span className="font-mono text-[12px]">Profiles</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => setDiagnosticsOpen(true)}
               disabled={loading}
               className="h-9 px-3"
@@ -861,7 +874,7 @@ function App() {
                       const isActive = selected?.id === item.id;
                       const isChecked = selectedListIds.has(item.id);
                       const usage = usageById[item.id];
-                      const invalid = item.category === "skills" && !item.valid;
+                      const invalid = !item.valid;
                       return (
                         <li
                           key={item.id}
@@ -920,7 +933,7 @@ function App() {
                                   ) : null}
                                 </div>
                                 <div className="mt-1 truncate text-[11.5px] text-muted-foreground">
-                                  {invalid ? item.invalidReason ?? "Skill is invalid" : item.description}
+                                  {invalid ? item.invalidReason ?? (item.category === "skills" ? "Skill is invalid" : "Needs attention") : item.description}
                                 </div>
                                 <div className="mt-1.5 flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-muted-foreground/80">
                                   <span>{item.tool === "claude" ? "Claude" : item.tool === "codex" ? "Codex" : "Agents"}</span>
@@ -979,14 +992,14 @@ function App() {
                         built-in
                       </span>
                     ) : null}
-                    {selected.category === "skills" && !selected.valid ? (
+                    {!selected.valid ? (
                       <span className="rounded-full bg-destructive/10 px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider text-destructive">invalid</span>
                     ) : null}
                   </div>
                   <div className="mt-1 truncate font-mono text-[11.5px] text-muted-foreground">{selected.path ?? selected.backupPath}</div>
-                  {selected.category === "skills" && !selected.valid ? (
+                  {!selected.valid ? (
                     <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-1.5 text-[12px] text-destructive">
-                      {selected.invalidReason ?? "Skill is invalid"}
+                      {selected.invalidReason ?? (selected.category === "skills" ? "Skill is invalid" : "Needs attention")}
                     </div>
                   ) : null}
                 </div>
@@ -1092,6 +1105,16 @@ function App() {
           onInspect={(id) => {
             setDiagnosticsOpen(false);
             void loadDetail(id);
+          }}
+        />
+      ) : null}
+      {profilesOpen ? (
+        <ProfilesDialog
+          items={items}
+          onClose={() => setProfilesOpen(false)}
+          onApplied={(message) => {
+            setStatus(message);
+            void loadItems();
           }}
         />
       ) : null}

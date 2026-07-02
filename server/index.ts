@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import { appendImportArchive, applyImportArchive, inspectImportArchive, writeExportArchive } from "./archive";
 import { getClaudeTapOverview, getClaudeTapSessionDetail } from "./claudeTap";
 import { getDetail, listInventory, toggleItem } from "./discovery";
+import { applyProfile, captureProfile, createProfile, deleteProfile, listProfiles, updateProfile } from "./profiles";
 import { getContextProbe, getStartupProbe, getUsageSummary } from "./usage";
 import { createDiagnosticsRun, diagnosticsCapabilities, getDiagnosticsRun, listDiagnosticsRuns, type OverlapMethod } from "./diagnostics";
 
@@ -94,6 +95,66 @@ app.post("/api/items/:id/toggle", async (req, res, next) => {
   try {
     const item = await toggleItem(req.params.id, Boolean(req.body?.enabled));
     res.json({ item });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/profiles", async (_req, res, next) => {
+  try {
+    res.json({ profiles: await listProfiles() });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/profiles", async (req, res, next) => {
+  try {
+    const profile = await createProfile({
+      name: req.body?.name,
+      description: req.body?.description,
+      enabledIds: Array.isArray(req.body?.enabledIds) ? req.body.enabledIds : undefined
+    });
+    res.json({ profile });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.put("/api/profiles/:id", async (req, res, next) => {
+  try {
+    const profile = await updateProfile(req.params.id, {
+      name: req.body?.name,
+      description: req.body?.description,
+      enabledIds: Array.isArray(req.body?.enabledIds) ? req.body.enabledIds : undefined
+    });
+    res.json({ profile });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete("/api/profiles/:id", async (req, res, next) => {
+  try {
+    await deleteProfile(req.params.id);
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/profiles/:id/capture", async (req, res, next) => {
+  try {
+    res.json({ profile: await captureProfile(req.params.id) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/profiles/:id/apply", async (req, res, next) => {
+  try {
+    const result = await applyProfile(req.params.id, { dryRun: Boolean(req.body?.dryRun) });
+    res.json({ result });
   } catch (error) {
     next(error);
   }

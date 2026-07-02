@@ -340,9 +340,42 @@ export async function listInventory() {
   const disabledPathItems = await Promise.all((["claude", "codex", "agents"] as const).map(collectDisabledPathItems));
   const configItems = await collectConfigItems();
   const toolItems = await collectToolItems();
+
   const byId = new Map<string, InventoryItem>();
-  [...activePathItems.flat(), ...disabledPathItems.flat(), ...configItems, ...toolItems].forEach((item) => byId.set(item.id, item));
+  // Active path items reflect what is actually live on disk — insert them first.
+  for (const item of activePathItems.flat()) byId.set(item.id, item);
+
+  // A disabled backup shares its id with the active item at the same original
+  // path (both hash from that path — see idFor in pathItem). If an active entry
+  // already exists for a backup's id, the item was re-created on disk after we
+  // moved it aside — e.g. a separate skills manager re-synced ~/.claude/skills.
+  // The live copy is the truth, so keep it and flag the stale backup rather than
+  // letting the disabled record silently overwrite it (which would report the
+  // item as disabled while the CLI is actually still loading it).
+  for (const item of disabledPathItems.flat()) {
+    const live = byId.get(item.id);
+    if (live?.enabled) byId.set(item.id, markReenabledExternally(live, item.backupPath));
+    else byId.set(item.id, item);
+  }
+
+  for (const item of [...configItems, ...toolItems]) byId.set(item.id, item);
   return [...byId.values()].sort((a, b) => `${a.tool}-${a.category}-${a.name}`.localeCompare(`${b.tool}-${b.category}-${b.name}`));
+}
+
+// Annotate an item that is live on disk yet still has a skill-toggle backup:
+// something re-created it after we disabled it, so our backup is stale and the
+// item is effectively re-enabled behind our back. We surface it through the
+// valid/invalidReason channel the UI already renders (and point at the stale
+// backup) so users can reconcile — disabling again overwrites the backup.
+function markReenabledExternally(live: InventoryItem, backupPath?: string): InventoryItem {
+  const noun = live.category === "skills" ? "skill" : "item";
+  const note = `Re-enabled outside skill-toggle: this ${noun} is live on disk again despite a skill-toggle backup${backupPath ? ` at ${backupPath}` : ""}. Disable it again to reconcile, or delete the stale backup.`;
+  return {
+    ...live,
+    valid: false,
+    invalidReason: live.invalidReason ? `${live.invalidReason} · ${note}` : note,
+    backupPath: backupPath ?? live.backupPath
+  };
 }
 
 interface ToolInvocation {
@@ -634,7 +667,13 @@ async function latestSessionFiles(root: string, limit: number): Promise<string[]
 }
 
 async function describePath(target: string) {
-  const stat = await fs.stat(target);
+  let stat;
+  try {
+    stat = await fs.stat(target);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code ?? "error";
+    return { detail: `${target}\n\nPath is unreadable (${code}).`, detailType: "text" as const };
+  }
   const candidates = stat.isDirectory()
     ? ["SKILL.md", "README.md", "readme.md", "description.md"].map((name) => path.join(target, name))
     : [target];
@@ -646,7 +685,12 @@ async function describePath(target: string) {
 }
 
 async function contextForPath(target: string): Promise<ContextStats> {
-  const stat = await fs.stat(target);
+  let stat;
+  try {
+    stat = await fs.stat(target);
+  } catch {
+    return emptyContextStats();
+  }
   if (!stat.isDirectory()) return contextForText(await safeRead(target));
 
   const candidates = ["SKILL.md", "README.md", "readme.md", "description.md"].map((name) => path.join(target, name));
@@ -792,15 +836,19 @@ async function requireItem(id: string): Promise<InventoryItem> {
   return item;
 }
 
-export async function toggleItem(id: string, enabled: boolean): Promise<InventoryItem> {
-  const item = await requireItem(id);
+/**
+ * Move a single item into or out of its backup, given an already-resolved
+ * InventoryItem. Does no inventory scanning, so callers holding a batch of items
+ * (e.g. applyProfile) can toggle many without paying an O(N) rescan each time.
+ */
+export async function performToggle(item: InventoryItem, enabled: boolean): Promise<void> {
   if (item.kind === "session-derived") {
     const error = item.source.startsWith("mcp:")
       ? Object.assign(new Error(`This tool is provided by MCP server "${item.source.slice(4)}". Disable that server from the MCP category to remove all of its tools.`), { statusCode: 409 })
       : Object.assign(new Error("Built-in tools are diagnostic-only here. Edit settings.json permissions to restrict them."), { statusCode: 409 });
     throw error;
   }
-  if (item.enabled === enabled) return item;
+  if (item.enabled === enabled) return;
 
   if (item.kind === "path") {
     const recordDir = path.join(backupHome[item.tool], "items", item.id);
@@ -819,7 +867,7 @@ export async function toggleItem(id: string, enabled: boolean): Promise<Inventor
       await fs.rename(meta.payloadPath, meta.originalPath);
       await fs.rm(recordDir, { recursive: true, force: true });
     }
-    return requireItem(id);
+    return;
   }
 
   const backupPath = path.join(backupHome[item.tool], "config", `${item.id}.json`);
@@ -842,5 +890,10 @@ export async function toggleItem(id: string, enabled: boolean): Promise<Inventor
     await writeConfig(meta.configPath, format, data);
     await fs.rm(backupPath, { force: true });
   }
+}
+
+export async function toggleItem(id: string, enabled: boolean): Promise<InventoryItem> {
+  const item = await requireItem(id);
+  await performToggle(item, enabled);
   return requireItem(id);
 }
