@@ -39,6 +39,15 @@ export interface Profile {
   enabled: ProfileEntry[];
 }
 
+export interface AiProfileResult {
+  profile: Profile;
+  skills: string[];
+  installed: string[];
+  alreadyPresent: string[];
+  warnings: string[];
+  llm: LlmTrace;
+}
+
 export interface ProfileApplyChange extends ProfileEntry {
   action: "enabled" | "disabled";
   ok: boolean;

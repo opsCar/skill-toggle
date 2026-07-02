@@ -1,9 +1,9 @@
 import React from "react";
-import { ArrowLeft, Camera, Check, ChevronRight, Layers, Pencil, Play, Plus, Search, Trash2, TriangleAlert, X } from "lucide-react";
+import { ArrowLeft, Camera, Check, ChevronRight, Layers, Pencil, Play, Plus, Search, Sparkles, Trash2, TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TriCheckbox } from "@/components/primitives";
-import { CATEGORY_LABELS, CATEGORY_ORDER, TOOL_LABELS, type Category, type InventoryItem, type Profile, type ProfileApplyResult } from "@/types";
+import { CATEGORY_LABELS, CATEGORY_ORDER, TOOL_LABELS, type AiProfileResult, type Category, type InventoryItem, type Profile, type ProfileApplyResult } from "@/types";
 
 function formatStamp(value: string): string {
   const date = new Date(value);
@@ -12,7 +12,7 @@ function formatStamp(value: string): string {
     : date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
-type View = "list" | "editor" | "apply";
+type View = "list" | "editor" | "apply" | "ai";
 
 export function ProfilesDialog({
   items,
@@ -40,6 +40,12 @@ export function ProfilesDialog({
   const [plan, setPlan] = React.useState<ProfileApplyResult | null>(null);
   const [applied, setApplied] = React.useState<ProfileApplyResult | null>(null);
 
+  // AI create state.
+  const [aiUrl, setAiUrl] = React.useState("");
+  const [aiBusy, setAiBusy] = React.useState(false);
+  const [aiResult, setAiResult] = React.useState<AiProfileResult | null>(null);
+  const [aiCap, setAiCap] = React.useState<{ available: boolean; reason?: string } | null>(null);
+
   // Only path/config-entry items are governable by a profile; session-derived
   // (built-in tools, MCP-provided tools) cannot be toggled.
   const governable = React.useMemo(() => items.filter((item) => item.kind !== "session-derived"), [items]);
@@ -60,6 +66,58 @@ export function ProfilesDialog({
   React.useEffect(() => {
     void loadProfiles();
   }, [loadProfiles]);
+
+  React.useEffect(() => {
+    let alive = true;
+    fetch("/api/ai-profile/capabilities")
+      .then((r) => r.json())
+      .then((data) => {
+        if (alive) setAiCap(data);
+      })
+      .catch(() => {
+        if (alive) setAiCap({ available: false, reason: "Could not check availability." });
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  function openAiCreate() {
+    setAiUrl("");
+    setAiResult(null);
+    setError("");
+    setView("ai");
+  }
+
+  async function generateAiProfile() {
+    const url = aiUrl.trim();
+    if (!url) {
+      setError("Paste a GitHub repository URL.");
+      return;
+    }
+    setAiBusy(true);
+    setAiResult(null);
+    setError("");
+    try {
+      const response = await fetch("/api/profiles/from-repo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Generation failed");
+      const result: AiProfileResult = data.result;
+      setAiResult(result);
+      await loadProfiles();
+      onApplied(
+        `Created “${result.profile.name}” — ${result.installed.length} installed, ${result.alreadyPresent.length} already present.`
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Generation failed");
+    } finally {
+      setAiBusy(false);
+    }
+  }
 
   function openCreate() {
     // New profile starts as a snapshot of the current enabled set — save as-is
@@ -182,7 +240,16 @@ export function ProfilesDialog({
     }
   }
 
-  const headerTitle = view === "editor" ? (editing ? "Edit profile" : "New profile") : view === "apply" ? "Apply profile" : "Profiles";
+  const headerTitle =
+    view === "editor"
+      ? editing
+        ? "Edit profile"
+        : "New profile"
+      : view === "apply"
+        ? "Apply profile"
+        : view === "ai"
+          ? "Create with AI"
+          : "Profiles";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
@@ -213,10 +280,22 @@ export function ProfilesDialog({
           </div>
           <div className="flex items-center gap-2">
             {view === "list" ? (
-              <Button size="sm" variant="primary" onClick={openCreate} disabled={loading}>
-                <Plus className="size-3.5" strokeWidth={2} />
-                New profile
-              </Button>
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={openAiCreate}
+                  disabled={loading || aiCap?.available === false}
+                  title={aiCap?.available === false ? aiCap.reason : undefined}
+                >
+                  <Sparkles className="size-3.5" strokeWidth={2} />
+                  Create with AI
+                </Button>
+                <Button size="sm" variant="primary" onClick={openCreate} disabled={loading}>
+                  <Plus className="size-3.5" strokeWidth={2} />
+                  New profile
+                </Button>
+              </>
             ) : null}
             <button type="button" onClick={onClose} className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground" aria-label="Close">
               <X className="size-4" />
@@ -226,7 +305,17 @@ export function ProfilesDialog({
 
         {error ? <div className="border-b border-destructive/30 bg-destructive/10 px-5 py-2 text-[12px] text-destructive">{error}</div> : null}
 
-        {view === "editor" ? (
+        {view === "ai" ? (
+          <AiCreateView
+            url={aiUrl}
+            busy={aiBusy}
+            result={aiResult}
+            capReason={aiCap?.available === false ? aiCap.reason : undefined}
+            onUrl={setAiUrl}
+            onGenerate={() => void generateAiProfile()}
+            onDone={() => setView("list")}
+          />
+        ) : view === "editor" ? (
           <ProfileEditor
             governable={governable}
             name={name}
@@ -645,6 +734,127 @@ function ApplyView({
             {busy ? "Applying…" : "Confirm & apply"}
           </Button>
         )}
+      </div>
+    </div>
+  );
+}
+
+function AiCreateView({
+  url,
+  busy,
+  result,
+  capReason,
+  onUrl,
+  onGenerate,
+  onDone
+}: {
+  url: string;
+  busy: boolean;
+  result: AiProfileResult | null;
+  capReason?: string;
+  onUrl: (value: string) => void;
+  onGenerate: () => void;
+  onDone: () => void;
+}) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="space-y-3 border-b border-border/70 px-5 py-4">
+        <p className="text-[12.5px] leading-relaxed text-muted-foreground">
+          Paste a GitHub repo that contains skills. The assistant clones it, installs any skills you don’t already have, and
+          creates a profile that turns on exactly those skills — leaving the rest of your harness as it is now.
+        </p>
+        <div className="flex items-center gap-2">
+          <input
+            aria-label="GitHub repository URL"
+            className="h-9 min-w-0 flex-1 rounded-md border border-border bg-card px-3 text-[13px] outline-none transition-colors focus:border-foreground/30 focus:ring-2 focus:ring-ring/20"
+            value={url}
+            onChange={(event) => onUrl(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && url.trim() && !busy) onGenerate();
+            }}
+            placeholder="https://github.com/mattpocock/skills"
+            disabled={busy}
+          />
+          <Button variant="primary" disabled={busy || !url.trim()} onClick={onGenerate}>
+            <Sparkles className="size-3.5" strokeWidth={2} />
+            {busy ? "Working…" : "Generate"}
+          </Button>
+        </div>
+        {capReason ? <p className="text-[11px] text-amber-600 dark:text-amber-400">{capReason}</p> : null}
+      </div>
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="px-5 py-4">
+          {busy ? (
+            <div className="space-y-3">
+              <div className="text-[12.5px] text-muted-foreground">Cloning the repo and installing skills — this can take a minute…</div>
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="h-10 animate-pulse rounded-md bg-muted" />
+              ))}
+            </div>
+          ) : result ? (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2.5 text-[12.5px]">
+                <Check className="size-4 shrink-0 text-primary" strokeWidth={2} />
+                <span>
+                  Created profile <span className="font-medium">{result.profile.name}</span> — {result.profile.enabled.length} items on.
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <SummaryTile label="Skills found" value={result.skills.length} tone="muted" />
+                <SummaryTile label="Installed" value={result.installed.length} tone="primary" />
+                <SummaryTile label="Already had" value={result.alreadyPresent.length} tone="muted" />
+              </div>
+              {result.installed.length > 0 ? <SkillChips title="Installed" names={result.installed} /> : null}
+              {result.alreadyPresent.length > 0 ? <SkillChips title="Already present" names={result.alreadyPresent} /> : null}
+              {result.warnings.length > 0 ? (
+                <div className="space-y-1.5">
+                  {result.warnings.map((warning, i) => (
+                    <div
+                      key={i}
+                      className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-[12px] text-amber-700 dark:text-amber-300"
+                    >
+                      <TriangleAlert className="mt-0.5 size-3.5 shrink-0" strokeWidth={1.75} />
+                      <span>{warning}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
+              <div className="mb-3 flex size-11 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                <Sparkles className="size-5" strokeWidth={1.5} />
+              </div>
+              <div className="text-[13px] font-medium">Turn a skills repo into a profile</div>
+              <div className="mt-1 max-w-[42ch] text-[12px] text-muted-foreground">
+                Missing skills are installed for Claude, Codex, and Agents; your MCP, hooks, rules, and other harness stay untouched.
+              </div>
+            </div>
+          )}
+        </div>
+      </ScrollArea>
+      {result ? (
+        <div className="flex items-center justify-end gap-2 border-t border-border/70 bg-muted/30 px-5 py-3">
+          <Button variant="primary" onClick={onDone}>
+            <Check className="size-3.5" strokeWidth={2} />
+            Done
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SkillChips({ title, names }: { title: string; names: string[] }) {
+  return (
+    <div>
+      <div className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">{title}</div>
+      <div className="flex flex-wrap gap-1.5">
+        {names.map((name) => (
+          <span key={name} className="rounded-md border border-border bg-card px-2 py-1 text-[11.5px] font-medium">
+            {name}
+          </span>
+        ))}
       </div>
     </div>
   );

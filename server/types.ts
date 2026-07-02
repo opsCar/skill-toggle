@@ -102,3 +102,20 @@ export interface ConfigEntryMeta {
   keyPath: string[];
   value: unknown;
 }
+
+/** Result of an AI-driven profile creation from a GitHub skills repo. */
+export interface AiProfileResult {
+  profile: Profile;
+  /** All skill folder names the assistant reported finding in the repo. */
+  skills: string[];
+  /** Skills newly installed by this run. */
+  installed: string[];
+  /** Skills that were already installed before this run. */
+  alreadyPresent: string[];
+  warnings: string[];
+  llm: {
+    prompt: string;
+    response: string;
+    usage?: { inputTokens?: number; outputTokens?: number; costUsd?: number; durationMs?: number };
+  };
+}

@@ -10,6 +10,7 @@ import { appendImportArchive, applyImportArchive, inspectImportArchive, writeExp
 import { getClaudeTapOverview, getClaudeTapSessionDetail } from "./claudeTap";
 import { getDetail, listInventory, toggleItem } from "./discovery";
 import { applyProfile, captureProfile, createProfile, deleteProfile, listProfiles, updateProfile } from "./profiles";
+import { aiProfileCapabilities, createProfileFromRepo } from "./aiProfile";
 import { getContextProbe, getStartupProbe, getUsageSummary } from "./usage";
 import { createDiagnosticsRun, diagnosticsCapabilities, getDiagnosticsRun, listDiagnosticsRuns, type OverlapMethod } from "./diagnostics";
 
@@ -116,6 +117,23 @@ app.post("/api/profiles", async (req, res, next) => {
       enabledIds: Array.isArray(req.body?.enabledIds) ? req.body.enabledIds : undefined
     });
     res.json({ profile });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/api/ai-profile/capabilities", async (_req, res, next) => {
+  try {
+    res.json(await aiProfileCapabilities());
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/profiles/from-repo", async (req, res, next) => {
+  try {
+    const result = await createProfileFromRepo({ url: req.body?.url });
+    res.json({ result });
   } catch (error) {
     next(error);
   }
