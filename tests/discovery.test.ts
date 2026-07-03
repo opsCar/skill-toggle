@@ -115,6 +115,64 @@ test("keeps a re-created path item live and flags its stale backup instead of ma
   expect((await listInventory()).filter((row) => row.category === "skills" && row.name === "plan-eng-review")).toHaveLength(1);
 });
 
+test("reconcile drops stale backups for re-installed items but keeps genuinely disabled ones", async () => {
+  const reinstalledDir = path.join(tmp, ".claude", "skills", "plan-eng-review");
+  const stillDisabledDir = path.join(tmp, ".claude", "skills", "office-hours");
+  for (const dir of [reinstalledDir, stillDisabledDir]) {
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(path.join(dir, "SKILL.md"), `---\nname: ${path.basename(dir)}\ndescription: A skill.\n---\nBody.\n`);
+  }
+
+  const { listInventory, toggleItem, reconcileStaleBackups } = await import("../server/discovery");
+  const items = await listInventory();
+  const reinstalled = items.find((row) => row.category === "skills" && row.name === "plan-eng-review")!;
+  const stillDisabled = items.find((row) => row.category === "skills" && row.name === "office-hours")!;
+
+  // Disable both through skill-toggle (moves each into ~/.claude_bak/items/<id>).
+  await toggleItem(reinstalled.id, false);
+  await toggleItem(stillDisabled.id, false);
+
+  // The user reinstalls only the first skill on disk at its original path.
+  await fs.mkdir(reinstalledDir, { recursive: true });
+  await fs.writeFile(path.join(reinstalledDir, "SKILL.md"), "---\nname: plan-eng-review\ndescription: A skill.\n---\nBody.\n");
+
+  // Pre-check: the reinstalled skill is flagged invalid by the stale backup.
+  const flagged = (await listInventory()).find((row) => row.id === reinstalled.id);
+  expect(flagged?.valid).toBe(false);
+
+  const result = await reconcileStaleBackups();
+  expect(result.reconciled).toHaveLength(1);
+  expect(result.reconciled[0]).toMatchObject({ name: "plan-eng-review", kind: "path" });
+
+  // The reinstalled skill is now clean; the untouched one stays disabled.
+  const after = await listInventory();
+  const healed = after.find((row) => row.id === reinstalled.id);
+  expect(healed?.enabled).toBe(true);
+  expect(healed?.valid).toBe(true);
+  const preserved = after.find((row) => row.id === stillDisabled.id);
+  expect(preserved?.enabled).toBe(false);
+});
+
+test("reconcile drops a stale config-entry backup when the entry is re-added", async () => {
+  const configPath = path.join(tmp, ".codex", "config.toml");
+  await fs.mkdir(path.dirname(configPath), { recursive: true });
+  await fs.writeFile(configPath, "[mcp_servers.demo]\ncommand = \"demo\"\n");
+
+  const { listInventory, toggleItem, reconcileStaleBackups } = await import("../server/discovery");
+  const item = (await listInventory()).find((row) => row.tool === "codex" && row.category === "mcp" && row.name === "demo")!;
+
+  // Disable (writes a config backup + strips the entry), then the user re-adds it manually.
+  await toggleItem(item.id, false);
+  await fs.writeFile(configPath, "[mcp_servers.demo]\ncommand = \"demo\"\n");
+
+  const result = await reconcileStaleBackups();
+  expect(result.reconciled).toHaveLength(1);
+  expect(result.reconciled[0]).toMatchObject({ name: "demo", kind: "config-entry" });
+
+  const after = (await listInventory()).find((row) => row.id === item.id);
+  expect(after?.enabled).toBe(true);
+});
+
 test("lists and toggles MCP config entries", async () => {
   const configPath = path.join(tmp, ".codex", "config.toml");
   await fs.mkdir(path.dirname(configPath), { recursive: true });

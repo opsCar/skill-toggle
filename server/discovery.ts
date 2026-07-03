@@ -897,3 +897,48 @@ export async function toggleItem(id: string, enabled: boolean): Promise<Inventor
   await performToggle(item, enabled);
   return requireItem(id);
 }
+
+export type ReconciledBackup = { tool: ToolName; category: Category; name: string; kind: "path" | "config-entry" };
+export type ReconcileResult = { reconciled: ReconciledBackup[] };
+
+// Drop backup records whose item is live on disk again. A backup only exists
+// because disabling deleted the item from its live location; if it is present
+// there once more, the user reinstalled/re-added it and the backup is stale.
+// Deleting it clears the "Re-enabled outside skill-toggle" invalid flag
+// (see markReenabledExternally) and makes the live copy the source of truth.
+// Backups whose item is still absent are genuinely disabled and left alone.
+export async function reconcileStaleBackups(): Promise<ReconcileResult> {
+  const reconciled: ReconciledBackup[] = [];
+  for (const tool of ["claude", "codex", "agents"] as const) {
+    const itemsDir = path.join(backupHome[tool], "items");
+    for (const child of await listChildren(itemsDir)) {
+      if (!child.isDirectory()) continue;
+      const recordDir = path.join(itemsDir, child.name);
+      try {
+        const meta = JSON.parse(await fs.readFile(path.join(recordDir, "meta.json"), "utf8")) as PathItemMeta;
+        if (!(await exists(meta.originalPath))) continue;
+        await fs.rm(recordDir, { recursive: true, force: true });
+        reconciled.push({ tool: meta.tool, category: meta.category, name: meta.name, kind: "path" });
+      } catch {
+        // Ignore malformed backup records.
+      }
+    }
+
+    const configDir = path.join(backupHome[tool], "config");
+    for (const child of await listChildren(configDir)) {
+      if (!child.name.endsWith(".json")) continue;
+      const backupPath = path.join(configDir, child.name);
+      try {
+        const meta = JSON.parse(await fs.readFile(backupPath, "utf8")) as ConfigEntryMeta;
+        const format = meta.configPath.endsWith(".toml") ? "toml" : "json";
+        const data = await readConfig(meta.configPath, format);
+        if (getAt(data, meta.keyPath) === undefined) continue;
+        await fs.rm(backupPath, { force: true });
+        reconciled.push({ tool: meta.tool, category: meta.category, name: meta.name, kind: "config-entry" });
+      } catch {
+        // Ignore malformed backup records.
+      }
+    }
+  }
+  return { reconciled };
+}

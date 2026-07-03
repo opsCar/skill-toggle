@@ -8,7 +8,7 @@ import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
 import { appendImportArchive, applyImportArchive, inspectImportArchive, writeExportArchive } from "./archive";
 import { getClaudeTapOverview, getClaudeTapSessionDetail } from "./claudeTap";
-import { getDetail, listInventory, toggleItem } from "./discovery";
+import { getDetail, listInventory, reconcileStaleBackups, toggleItem } from "./discovery";
 import { applyProfile, captureProfile, createProfile, deleteProfile, listProfiles, updateProfile } from "./profiles";
 import { aiProfileCapabilities, createProfileFromRepo } from "./aiProfile";
 import { getContextProbe, getStartupProbe, getUsageSummary } from "./usage";
@@ -96,6 +96,14 @@ app.post("/api/items/:id/toggle", async (req, res, next) => {
   try {
     const item = await toggleItem(req.params.id, Boolean(req.body?.enabled));
     res.json({ item });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/api/reconcile", async (_req, res, next) => {
+  try {
+    res.json(await reconcileStaleBackups());
   } catch (error) {
     next(error);
   }

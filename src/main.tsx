@@ -219,6 +219,25 @@ function App() {
     if (data.item) await loadDetail(data.item.id);
   }
 
+  async function reconcileStaleBackups() {
+    setBusy(true);
+    setError("");
+    setStatus("Scanning for stale backups…");
+    try {
+      const response = await fetch("/api/reconcile", { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Reconcile failed");
+      const count = Array.isArray(data.reconciled) ? data.reconciled.length : 0;
+      setStatus(count > 0 ? `Reconciled ${count} stale backup${count === 1 ? "" : "s"}.` : "No stale backups found.");
+      await loadItems();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Reconcile failed");
+      setStatus("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   React.useEffect(() => {
     if (isSessionRoute) return;
     void loadItems();
@@ -528,24 +547,6 @@ function App() {
             </div>
           </div>
 
-          <div className="hidden flex-1 items-center justify-center md:flex">
-            <div className="flex items-center gap-0 rounded-full border border-border bg-card/70 py-1 pl-1 pr-1 card-edge">
-              <StatPill label="Items" value={formatNumber(items.length)} />
-              <StatDivider />
-              <StatPill label="On" value={formatNumber(enabledCount)} accent />
-              <StatDivider />
-              <StatPill label="Claude" value={formatNumber(toolTotals.claude ?? 0)} />
-              <StatDivider />
-              <StatPill label="Codex" value={formatNumber(toolTotals.codex ?? 0)} />
-              <StatDivider />
-              <StatPill label="Agents" value={formatNumber(toolTotals.agents ?? 0)} />
-              <StatDivider />
-              <StatPill label="Uses" value={formatNumber(usageTotal)} />
-              <StatDivider />
-              <StatPill label="Tokens" value={formatNumber(contextTotal)} />
-            </div>
-          </div>
-
           <div className="flex items-center gap-2">
             <input ref={importInputRef} type="file" accept=".tar.gz,.tgz,application/gzip,application/x-gzip" className="hidden" onChange={onImportPicked} aria-label="Import archive file" />
             <Button
@@ -607,6 +608,17 @@ function App() {
             >
               <Upload className="size-3.5" strokeWidth={1.75} />
               <span className="font-mono text-[12px]">{importProgressText ?? "Import"}</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void reconcileStaleBackups()}
+              disabled={loading || busy}
+              title="Scan all backups and drop stale ones for items that are installed on disk again — the latest installed copy wins."
+              className="h-9 px-3"
+            >
+              <Wrench className="size-3.5" strokeWidth={1.75} />
+              <span className="font-mono text-[12px]">Reload</span>
             </Button>
             <Button
               variant="ghost"
