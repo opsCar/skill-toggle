@@ -51,6 +51,22 @@ export function ProfilesDialog({
   const governable = React.useMemo(() => items.filter((item) => item.kind !== "session-derived"), [items]);
   const enabledIds = React.useMemo(() => governable.filter((item) => item.enabled).map((item) => item.id), [governable]);
 
+  // A profile matches the current environment when applying it would change
+  // nothing: its enabled set (restricted to items still present) equals the set
+  // of items on now. Everything else governable is off in both.
+  const currentProfileIds = React.useMemo(() => {
+    const governableIds = new Set(governable.map((item) => item.id));
+    const enabledSet = new Set(enabledIds);
+    const matches = new Set<string>();
+    for (const profile of profiles) {
+      const target = profile.enabled.map((entry) => entry.id).filter((id) => governableIds.has(id));
+      if (target.length === enabledSet.size && target.every((id) => enabledSet.has(id))) {
+        matches.add(profile.id);
+      }
+    }
+    return matches;
+  }, [profiles, governable, enabledIds]);
+
   const loadProfiles = React.useCallback(async () => {
     setLoading(true);
     try {
@@ -345,6 +361,7 @@ export function ProfilesDialog({
             loading={loading}
             busy={busy}
             enabledCount={enabledIds.length}
+            currentProfileIds={currentProfileIds}
             onApply={(p) => void startApply(p)}
             onEdit={openEdit}
             onCapture={(p) => void captureCurrent(p)}
@@ -361,6 +378,7 @@ function ProfileList({
   loading,
   busy,
   enabledCount,
+  currentProfileIds,
   onApply,
   onEdit,
   onCapture,
@@ -370,6 +388,7 @@ function ProfileList({
   loading: boolean;
   busy: boolean;
   enabledCount: number;
+  currentProfileIds: Set<string>;
   onApply: (profile: Profile) => void;
   onEdit: (profile: Profile) => void;
   onCapture: (profile: Profile) => void;
@@ -400,10 +419,23 @@ function ProfileList({
   return (
     <ScrollArea className="min-h-0 flex-1">
       <ul className="divide-y divide-border/70">
-        {profiles.map((profile) => (
-          <li key={profile.id} className="flex items-center gap-3 px-5 py-3.5">
+        {profiles.map((profile) => {
+          const isCurrent = currentProfileIds.has(profile.id);
+          return (
+          <li
+            key={profile.id}
+            className={`flex items-center gap-3 px-5 py-3.5 ${isCurrent ? "border-l-2 border-l-primary bg-primary/5" : ""}`}
+          >
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[13px] font-medium tracking-tightish">{profile.name}</div>
+              <div className="flex items-center gap-2">
+                <span className="truncate text-[13px] font-medium tracking-tightish">{profile.name}</span>
+                {isCurrent ? (
+                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[9.5px] font-medium uppercase tracking-[0.12em] text-primary">
+                    <Check className="size-3" strokeWidth={2.5} />
+                    Current
+                  </span>
+                ) : null}
+              </div>
               <div className="mt-0.5 font-mono text-[11px] text-muted-foreground">
                 {profile.enabled.length} on · updated {formatStamp(profile.updatedAt)}
               </div>
@@ -425,7 +457,8 @@ function ProfileList({
               </IconButton>
             </div>
           </li>
-        ))}
+          );
+        })}
       </ul>
     </ScrollArea>
   );
